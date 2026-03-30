@@ -283,7 +283,7 @@
 | Huion Kamvas Pro 24                |  Missing Features | Touch bar is not yet supported.
 | Huion Kamvas Pro 24 (Gen 3)        |  Missing Features | Touch is not yet supported.
 | Huion Q620M                        |  Missing Features | Wheel button is not yet supported.
-| Huion Q630M                        |  Missing Features | Dials/Wheels are not yet supported.
+| Huion Q630M                        |  Missing Features |                                     |
 | Huion RTM-500                      |  Missing Features | Touch bar is not yet supported.
 | Huion RTP-700                      |  Missing Features | Touch bar is not yet supported.
 | LifeTec LT9570                     |  Missing Features | Aux buttons and tilt is not yet supported.
