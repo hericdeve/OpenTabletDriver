@@ -9,20 +9,22 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
         {
             Raw = report;
 
+            bool bit(int index, int position) => report.Length > index && report[index].IsBitSet(position);
+
             AuxButtons =
             [
-                report[4].IsBitSet(0),
-                report[4].IsBitSet(1),
-                report[4].IsBitSet(2),
-                report[4].IsBitSet(3),
-                report[4].IsBitSet(4),
-                report[4].IsBitSet(5),
+                bit(4, 0),
+                bit(4, 1),
+                bit(4, 2),
+                bit(4, 3),
+                bit(4, 4),
+                bit(4, 5),
             ];
 
             WheelButtons =
             [
-                [report[4].IsBitSet(6)],
-                [report[4].IsBitSet(7)]
+                [bit(4, 6)],
+                [bit(4, 7)]
             ];
         }
 
