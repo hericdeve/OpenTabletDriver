@@ -72,6 +72,7 @@ namespace OpenTabletDriver.Daemon
             {
                 if (presetName != _currentPreset)
                 {
+                    presetManager.Refresh();
                     var preset = presetManager.FindPreset(presetName);
                     if (preset != null)
                     {
@@ -93,6 +94,7 @@ namespace OpenTabletDriver.Daemon
             }
             else if (!string.IsNullOrEmpty(settings.DefaultAppProfile) && settings.DefaultAppProfile != _currentPreset)
             {
+                presetManager.Refresh();
                 var preset = presetManager.FindPreset(settings.DefaultAppProfile);
                 if (preset != null)
                 {
