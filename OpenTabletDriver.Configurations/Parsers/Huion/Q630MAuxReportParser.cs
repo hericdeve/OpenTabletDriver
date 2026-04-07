@@ -6,7 +6,7 @@ using OpenTabletDriver.Plugin.Tablet;
 namespace OpenTabletDriver.Configurations.Parsers.Huion
 {
     [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
-    public class Q630MBluetoothPenReportParser : IReportParser<IDeviceReport>
+    public class Q630MAuxReportParser : IReportParser<IDeviceReport>
     {
         private readonly Dictionary<ulong, int> _shortcutButtonSlots = new();
         private const int ButtonSlotCount = 8;
@@ -18,7 +18,6 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
                 return new DeviceReport(data);
             }
 
-            // Wheel reports from some Q630M BT firmware variants.
             if (data[1] == 0xF1)
             {
                 if (data.Length < 6)
@@ -29,34 +28,22 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
                 return new KamvasRelWheelReport(data);
             }
 
-            // Aux/button reports can be emitted in UCLogic-style packets.
-            if (data[1] == 0xE0 || (data[1].IsBitSet(5) && data[1].IsBitSet(6)))
-            {
-                if (data.Length < 4)
-                {
-                    return new DeviceReport(data);
-                }
-
-                if (LooksLikeLegacyBitfieldPacket(data))
-                {
-                    return new UCLogicAuxReport(data);
-                }
-
-                return new Q630MBluetoothAuxReport(data, DecodeShortcutButtons(data));
-            }
-
-            if (data[1] == 0xC0)
-            {
-                return new OutOfRangeReport(data);
-            }
-
-            // BT endpoint reports are 10-byte pen packets (no tilt fields).
-            if (data.Length < 8)
+            if (data[1] != 0xE0 && !(data[1].IsBitSet(5) && data[1].IsBitSet(6)))
             {
                 return new DeviceReport(data);
             }
 
-            return new TabletReport(data);
+            if (data.Length < 4)
+            {
+                return new DeviceReport(data);
+            }
+
+            if (LooksLikeLegacyBitfieldPacket(data))
+            {
+                return new UCLogicAuxReport(data);
+            }
+
+            return new Q630MBluetoothAuxReport(data, DecodeShortcutButtons(data));
         }
 
         private bool[] DecodeShortcutButtons(byte[] data)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -478,7 +479,35 @@ namespace OpenTabletDriver.UX
 
         private async void LogToDriver(object sender, LogMessage message)
         {
-            if (App.Driver.IsConnected) await App.Driver.Instance?.WriteMessage(message);
+            if (!App.Driver.IsConnected)
+                return;
+
+            var daemon = App.Driver.Instance;
+            if (daemon is null)
+                return;
+
+            try
+            {
+                await daemon.WriteMessage(message);
+            }
+            catch (Exception ex) when (IsExpectedRpcDisconnect(ex))
+            {
+                // The daemon disconnected while forwarding UI logs.
+            }
+        }
+
+        private static bool IsExpectedRpcDisconnect(Exception ex)
+        {
+            if (ex is ObjectDisposedException or IOException or OperationCanceledException)
+                return true;
+
+            if (ex is SocketException socketEx)
+                return socketEx.SocketErrorCode is SocketError.ConnectionReset or SocketError.Shutdown or SocketError.NotConnected;
+
+            if (ex.InnerException is not null)
+                return IsExpectedRpcDisconnect(ex.InnerException);
+
+            return false;
         }
 
         private void HandleDaemonDisconnected(object sender, EventArgs e)

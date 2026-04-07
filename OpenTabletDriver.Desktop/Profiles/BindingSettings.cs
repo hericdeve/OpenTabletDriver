@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Newtonsoft.Json;
 using OpenTabletDriver.Desktop.Binding;
 using OpenTabletDriver.Desktop.Reflection;
@@ -147,6 +148,14 @@ namespace OpenTabletDriver.Desktop.Profiles
             int penButtonCount = (int?)tabletSpecifications.Pen?.ButtonCount ?? 0;
             int auxButtonCount = (int?)tabletSpecifications.AuxiliaryButtons?.ButtonCount ?? 0;
             int mouseButtonCount = (int?)tabletSpecifications.MouseButtons?.ButtonCount ?? 0;
+
+            // Keep existing pen bindings when legacy/mismatched settings are loaded against
+            // a profile that unexpectedly reports 0 pen buttons. This avoids destructive
+            // trimming of user mappings and preserves behavior until specs are corrected.
+            if (penButtonCount == 0 && PenButtons.Any(b => b is not null))
+            {
+                penButtonCount = PenButtons.Count;
+            }
 
             PenButtons = PenButtons.SetExpectedCount(penButtonCount);
             AuxButtons = AuxButtons.SetExpectedCount(auxButtonCount);
