@@ -76,6 +76,7 @@ namespace OpenTabletDriver.Daemon
                     if (preset != null)
                     {
                         Log.Write("AppProfileMonitor", $"Applying preset '{preset.Name}' for application '{windowClass}'.", LogLevel.Info);
+                        Console.WriteLine($"[AppProfiler] Switching to preset '{preset.Name}' for application '{windowClass}'");
 
                         preset.Settings.EnableAppProfiler = settings.EnableAppProfiler;
                         preset.Settings.AppProfiles = settings.AppProfiles;
@@ -96,6 +97,7 @@ namespace OpenTabletDriver.Daemon
                 if (preset != null)
                 {
                     Log.Write("AppProfileMonitor", $"Applying default preset '{preset.Name}'.", LogLevel.Info);
+                    Console.WriteLine($"[AppProfiler] Reverting to default preset '{preset.Name}' for application '{windowClass}'");
 
                     preset.Settings.EnableAppProfiler = settings.EnableAppProfiler;
                     preset.Settings.AppProfiles = settings.AppProfiles;
