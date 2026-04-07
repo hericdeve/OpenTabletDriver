@@ -63,6 +63,7 @@ namespace OpenTabletDriver.Console
             CreateCommand<FileInfo>(SaveSettings, "Save settings to a file", "save"),
             CreateCommand(SaveDefaultSettings, "Save settings to the default settings file", "save-defaults"),
             CreateCommand<string>(ApplyPreset, "Apply a preset from the Presets directory", "preset"),
+            CreateCommand(GetCurrentPreset, "Gets the current configuration's preset if one matches", "current-preset"),
             CreateCommand<string>(SavePreset, "Save the current settings to the Presets directory"),
         ];
 

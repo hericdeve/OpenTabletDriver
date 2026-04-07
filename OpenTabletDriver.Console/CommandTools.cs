@@ -11,8 +11,11 @@ namespace OpenTabletDriver.Console
             where T : Delegate
         {
             var command = new Command(action.Method.Name.ToLower(), description);
-            foreach (var alias in aliases.Skip(1))
-                command.Aliases.Add(alias);
+            foreach (var alias in aliases)
+            {
+                if (alias != command.Name)
+                    command.Aliases.Add(alias);
+            }
             return command;
         }
 

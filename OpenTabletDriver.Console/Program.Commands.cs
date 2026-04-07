@@ -69,6 +69,35 @@ namespace OpenTabletDriver.Console
             await ApplySettings(preset.Settings);
         }
 
+        private static async Task GetCurrentPreset()
+        {
+            if (!await EnsureDaemonReady()) return;
+            GetAndRefreshPresetDirectory();
+
+            var currentSettings = await Driver.Instance.GetSettings();
+            var serializedCurrent = SerializeSettings(currentSettings);
+
+            foreach (var preset in AppInfo.PresetManager.GetPresets())
+            {
+                var serializedPreset = SerializeSettings(preset.Settings);
+                if (serializedCurrent == serializedPreset)
+                {
+                    System.Console.WriteLine(preset.Name);
+                    return;
+                }
+            }
+
+            System.Console.WriteLine("Custom");
+        }
+
+        private static string SerializeSettings(Settings settings)
+        {
+            using var sw = new StringWriter();
+            using var jw = new Newtonsoft.Json.JsonTextWriter(sw);
+            Serialization.Serialize(jw, settings);
+            return sw.ToString();
+        }
+
         private static async Task SavePreset(string name)
         {
             if (!await EnsureDaemonReady()) return;
