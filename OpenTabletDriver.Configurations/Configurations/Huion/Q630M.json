@@ -37,6 +37,24 @@
       "InitializationStrings": [
         200
       ]
+    },
+    {
+      "VendorID": 9580,
+      "ProductID": 33361,
+      "ReportParser": "OpenTabletDriver.Configurations.Parsers.Huion.Q630MReportParser",
+      "Attributes": {
+        "HID_REPORTS": "000D:0002"
+      }
+    }
+  ],
+  "AuxiliaryDeviceIdentifiers": [
+    {
+      "VendorID": 9580,
+      "ProductID": 33361,
+      "ReportParser": "OpenTabletDriver.Configurations.Parsers.Huion.Q630MReportParser",
+      "Attributes": {
+        "HID_REPORTS": "0001:000E"
+      }
     }
   ],
   "Attributes": {

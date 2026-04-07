@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.IO.Pipes;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using OpenTabletDriver.Plugin;
@@ -39,6 +40,8 @@ namespace OpenTabletDriver.Desktop.RPC
                 await rpc.Completion.WaitAsync(ct);
             }
             catch (TaskCanceledException) { } // ignore exceptions caused by daemon shutting down
+            catch (IOException ex) when (IsExpectedDisconnect(ex)) { } // ignore client-side disconnects
+            catch (SocketException ex) when (IsExpectedDisconnect(ex)) { } // ignore client-side disconnects
             catch (Exception ex)
             {
                 Log.Exception(ex);
@@ -57,6 +60,22 @@ namespace OpenTabletDriver.Desktop.RPC
                 PipeTransmissionMode.Byte,
                 PipeOptions.Asynchronous | PipeOptions.WriteThrough | PipeOptions.CurrentUserOnly
             );
+        }
+
+        private static bool IsExpectedDisconnect(IOException ex)
+        {
+            if (ex.InnerException is SocketException socketEx)
+            {
+                return IsExpectedDisconnect(socketEx);
+            }
+
+            return ex.Message.Contains("Connection reset by peer", StringComparison.OrdinalIgnoreCase)
+                || ex.Message.Contains("Broken pipe", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsExpectedDisconnect(SocketException ex)
+        {
+            return ex.SocketErrorCode is SocketError.ConnectionReset or SocketError.Shutdown;
         }
     }
 }

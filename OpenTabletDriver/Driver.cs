@@ -212,6 +212,32 @@ namespace OpenTabletDriver
         {
             var attributes = new Dictionary<string, string>(identifier_attributes ?? Enumerable.Empty<KeyValuePair<string, string>>());
 
+            if (identifier_attributes != null)
+            {
+                if (identifier_attributes.TryGetValue("DevicePath", out var devicePathPattern) &&
+                    !Regex.IsMatch(device.DevicePath, devicePathPattern))
+                {
+                    return false;
+                }
+
+                if (identifier_attributes.TryGetValue("FriendlyName", out var friendlyNamePattern) &&
+                    !Regex.IsMatch(device.FriendlyName, friendlyNamePattern))
+                {
+                    return false;
+                }
+
+                if (identifier_attributes.TryGetValue("HID_REPORTS", out var hidReportsPattern))
+                {
+                    var deviceAttributes = device.DeviceAttributes;
+                    if (deviceAttributes == null ||
+                        !deviceAttributes.TryGetValue("HID_REPORTS", out var hidReports) ||
+                        !Regex.IsMatch(hidReports, hidReportsPattern))
+                    {
+                        return false;
+                    }
+                }
+            }
+
             if (config_attributes != null)
             {
                 foreach (var kvp in config_attributes)
