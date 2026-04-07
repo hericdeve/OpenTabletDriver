@@ -4,6 +4,7 @@ using System.CommandLine;
 using System.ComponentModel;
 using System.IO;
 using System.IO.Pipes;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -59,6 +60,15 @@ namespace OpenTabletDriver.UX
         {
             var app = new Application(platform);
             var mainForm = new MainForm();
+
+            TaskScheduler.UnobservedTaskException += (_, e) =>
+            {
+                if (!IsExpectedRpcDisconnect(e.Exception))
+                    Log.Exception(e.Exception);
+
+                e.SetObserved();
+            };
+
             if (options.StartMinimized)
             {
                 mainForm.WindowState = WindowState.Minimized;
@@ -81,28 +91,45 @@ namespace OpenTabletDriver.UX
 
             Task.Run(async () =>
             {
-                await using var ipcServer = new NamedPipeServerStream(
-                    APPNAME + ".Singleton",
-                    PipeDirection.InOut,
-                    1,
-                    PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous);
-
-                while (!Current.Canceler.IsCancellationRequested)
+                try
                 {
-                    // if something connects to the pipe, it means another instance is trying to start
-                    // no need for any actual communication
-                    await ipcServer.WaitForConnectionAsync(Current.Canceler.Token);
+                    await using var ipcServer = new NamedPipeServerStream(
+                        APPNAME + ".Singleton",
+                        PipeDirection.InOut,
+                        1,
+                        PipeTransmissionMode.Byte,
+                        PipeOptions.Asynchronous);
 
-                    app.AsyncInvoke(() =>
+                    while (!Current.Canceler.IsCancellationRequested)
                     {
-                        mainForm.Show();
-                        mainForm.BringToFront();
-                    });
-                    ipcServer.Disconnect();
+                        // if something connects to the pipe, it means another instance is trying to start
+                        // no need for any actual communication
+                        await ipcServer.WaitForConnectionAsync(Current.Canceler.Token);
+
+                        app.AsyncInvoke(() =>
+                        {
+                            mainForm.Show();
+                            mainForm.BringToFront();
+                        });
+
+                        ipcServer.Disconnect();
+                    }
+
+                    ipcServer.Close();
+                    Current.IsActive = false;
                 }
-                ipcServer.Close();
-                Current.IsActive = false;
+                catch (OperationCanceledException)
+                {
+                    // app shutdown
+                }
+                catch (Exception ex) when (IsExpectedRpcDisconnect(ex))
+                {
+                    // can happen while shutting down and disposing transport
+                }
+                catch (Exception ex)
+                {
+                    Log.Exception(ex);
+                }
             });
 
             app.Run(mainForm);
@@ -196,6 +223,12 @@ namespace OpenTabletDriver.UX
             try
             {
                 var exception = e.ExceptionObject as Exception;
+                if (exception is null)
+                    return;
+
+                if (IsExpectedRpcDisconnect(exception))
+                    return;
+
                 Log.Exception(exception);
                 exception.ShowMessageBox();
             }
@@ -204,6 +237,25 @@ namespace OpenTabletDriver.UX
                 // Stops recursion of exceptions if the messagebox itself throws an exception
                 Log.Exception(ex);
             }
+        }
+
+        private static bool IsExpectedRpcDisconnect(Exception ex)
+        {
+            if (ex is StreamJsonRpc.ConnectionLostException
+                or OperationCanceledException
+                or ObjectDisposedException
+                or IOException)
+            {
+                return true;
+            }
+
+            if (ex is AggregateException aggregateException)
+                return aggregateException.InnerExceptions.Count > 0 && aggregateException.InnerExceptions.All(e => IsExpectedRpcDisconnect(e));
+
+            if (ex.InnerException is not null)
+                return IsExpectedRpcDisconnect(ex.InnerException);
+
+            return false;
         }
     }
 }

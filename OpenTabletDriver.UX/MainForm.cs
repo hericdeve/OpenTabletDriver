@@ -60,6 +60,9 @@ namespace OpenTabletDriver.UX
 
         private async Task ConnectToDaemon()
         {
+            if (Interlocked.Exchange(ref _isConnectingToDaemon, 1) == 1)
+                return;
+
             try
             {
                 while (true)
@@ -99,10 +102,18 @@ namespace OpenTabletDriver.UX
                 if (!this.SkipUpdate)
                     CheckForUpdates();
             }
+            catch (Exception ex) when (IsExpectedRpcDisconnect(ex))
+            {
+                // The daemon disconnected mid-handshake; disconnect handler will retry.
+            }
             catch (Exception ex)
             {
                 ex.ShowMessageBox();
                 Environment.Exit(2);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isConnectingToDaemon, 0);
             }
         }
 
@@ -112,6 +123,7 @@ namespace OpenTabletDriver.UX
         private MenuBar menu;
         private Placeholder placeholder;
         private TrayIcon trayIcon;
+        private int _isConnectingToDaemon;
 
         public bool SilenceDaemonShutdown { get; set; }
         public bool SkipUpdate { get; set; }
@@ -425,54 +437,85 @@ namespace OpenTabletDriver.UX
         // ReSharper disable once AsyncVoidMethod
         private void HandleDaemonConnected(object sender, EventArgs e) => Application.Instance.AsyncInvoke(async void () =>
         {
-            // Hook events after the instance is (re)instantiated
-            Log.Output += LogToDriver;
-            App.Driver.TabletsChanged += (sender, tablet) => SetTitle(tablet);
+            var daemon = App.Driver.Instance;
+            if (daemon is null)
+                return;
 
-            // Load full menu
-            this.Menu = ConstructMenu();
-
-            // Load the application information from the daemon
-            AppInfo.Current = await App.Driver.Instance.GetApplicationInfo();
-
-            AppInfo.PluginManager = new DesktopPluginManager();
-            AppInfo.PresetManager = new PresetManager();
-
-            // Load any new plugins
-            AppInfo.PluginManager.Load();
-
-            // Show the startup greeter
-            if (!File.Exists(AppInfo.Current.SettingsFile) && this.WindowState != WindowState.Minimized)
-                App.Current.StartupGreeterWindow.Show();
-
-            // Synchronize settings
-            await SyncSettings();
-            App.Driver.Resynchronize += async (sender, e) => await SyncSettings();
-
-            // Set window content
-            base.Menu = menu ??= ConstructMenu();
-            base.Content = new TabletSwitcherPanel
+            try
             {
-                CommandsControl = new StackLayout
+                // Hook events after the instance is (re)instantiated
+                Log.Output -= LogToDriver;
+                Log.Output += LogToDriver;
+                App.Driver.TabletsChanged -= HandleTabletsChanged;
+                App.Driver.TabletsChanged += HandleTabletsChanged;
+                App.Driver.Resynchronize -= HandleResynchronize;
+                App.Driver.Resynchronize += HandleResynchronize;
+
+                // Load full menu
+                this.Menu = ConstructMenu();
+
+                // Load the application information from the daemon
+                AppInfo.Current = await daemon.GetApplicationInfo();
+
+                AppInfo.PluginManager = new DesktopPluginManager();
+                AppInfo.PresetManager = new PresetManager();
+
+                // Load any new plugins
+                AppInfo.PluginManager.Load();
+
+                // Show the startup greeter
+                if (!File.Exists(AppInfo.Current.SettingsFile) && this.WindowState != WindowState.Minimized)
+                    App.Current.StartupGreeterWindow.Show();
+
+                // Synchronize settings
+                await SyncSettings();
+
+                // Set window content
+                base.Menu = menu ??= ConstructMenu();
+                base.Content = new TabletSwitcherPanel
                 {
-                    Orientation = Orientation.Horizontal,
-                    HorizontalContentAlignment = HorizontalAlignment.Right,
-                    Spacing = 5,
-                    Items =
+                    CommandsControl = new StackLayout
                     {
-                        saveButton,
-                        applyButton,
+                        Orientation = Orientation.Horizontal,
+                        HorizontalContentAlignment = HorizontalAlignment.Right,
+                        Spacing = 5,
+                        Items =
+                        {
+                            saveButton,
+                            applyButton,
+                        }
                     }
-                }
-            };
+                };
 
-            // Update preset options in File menu and tray icon
-            await RefreshPresets();
+                // Update preset options in File menu and tray icon
+                await RefreshPresets();
 
-            // Update title to new instance
-            if (await App.Driver.Instance.GetTablets() is IEnumerable<TabletReference> tablets)
-                SetTitle(tablets);
+                // Update title to new instance
+                if (await daemon.GetTablets() is IEnumerable<TabletReference> tablets)
+                    SetTitle(tablets);
+            }
+            catch (Exception ex) when (IsExpectedRpcDisconnect(ex))
+            {
+                // The daemon disconnected during startup synchronization.
+            }
         });
+
+        private async void HandleResynchronize(object sender, EventArgs e)
+        {
+            try
+            {
+                await SyncSettings();
+            }
+            catch (Exception ex) when (IsExpectedRpcDisconnect(ex))
+            {
+                // The daemon disconnected while syncing settings.
+            }
+        }
+
+        private void HandleTabletsChanged(object sender, IEnumerable<TabletReference> tablets)
+        {
+            SetTitle(tablets);
+        }
 
         private Button saveButton;
         private Button applyButton;
@@ -498,8 +541,14 @@ namespace OpenTabletDriver.UX
 
         private static bool IsExpectedRpcDisconnect(Exception ex)
         {
+            if (ex is StreamJsonRpc.ConnectionLostException)
+                return true;
+
             if (ex is ObjectDisposedException or IOException or OperationCanceledException)
                 return true;
+
+            if (ex is AggregateException aggregateException)
+                return aggregateException.InnerExceptions.All(IsExpectedRpcDisconnect);
 
             if (ex is SocketException socketEx)
                 return socketEx.SocketErrorCode is SocketError.ConnectionReset or SocketError.Shutdown or SocketError.NotConnected;
@@ -513,6 +562,8 @@ namespace OpenTabletDriver.UX
         private void HandleDaemonDisconnected(object sender, EventArgs e)
         {
             Log.Output -= LogToDriver;
+            App.Driver.TabletsChanged -= HandleTabletsChanged;
+            App.Driver.Resynchronize -= HandleResynchronize;
             if (SilenceDaemonShutdown)
                 return;
 
