@@ -22,9 +22,6 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
 
             if (data[1] == 0xE0 || (data[1].IsBitSet(5) && data[1].IsBitSet(6)))
             {
-                if (data.Length >= 7)
-                    return new UCLogicAuxReport(data);
-
                 if (data.Length >= 5)
                     return new Q630MAuxReport(data);
 

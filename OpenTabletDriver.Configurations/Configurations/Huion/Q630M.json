@@ -51,10 +51,7 @@
     {
       "VendorID": 9580,
       "ProductID": 33361,
-      "ReportParser": "OpenTabletDriver.Configurations.Parsers.Huion.Q630MAuxReportParser",
-      "Attributes": {
-        "HID_REPORTS": "0001:000E"
-      }
+      "ReportParser": "OpenTabletDriver.Configurations.Parsers.Huion.Q630MAuxReportParser"
     }
   ],
   "Attributes": {

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using OpenTabletDriver.Configurations.Parsers.UCLogic;
+using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Tablet;
 
 namespace OpenTabletDriver.Configurations.Parsers.Huion
@@ -8,7 +9,15 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
     [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     public class Q630MBluetoothPenReportParser : IReportParser<IDeviceReport>
     {
-        private readonly Dictionary<ulong, int> _shortcutButtonSlots = new();
+        private readonly Dictionary<ulong, int> _shortcutButtonSlots = new()
+        {
+            { 0x050000000000, 0 }, // B
+            { 0x080000000000, 1 }, // E
+            { 0x0C0000000000, 2 }, // I
+            { 0x1160000000000, 3 }, // Ctrl+S
+            { 0x02C0000000000, 4 }, // Space
+            { 0x51D0000000000, 5 }  // Ctrl+Alt+Z
+        };
         private const int ButtonSlotCount = 8;
 
         public IDeviceReport Parse(byte[] data)
@@ -16,6 +25,24 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
             if (data.Length < 2)
             {
                 return new DeviceReport(data);
+            }
+
+            if (data.Length >= 8)
+            {
+                bool isZero = true;
+                for (int i = 0; i < data.Length; i++)
+                {
+                    if (data[i] != 0)
+                    {
+                        isZero = false;
+                        break;
+                    }
+                }
+                
+                if (isZero)
+                {
+                    return new Q630MBluetoothAuxReport(data, new bool[ButtonSlotCount]);
+                }
             }
 
             // Wheel reports from some Q630M BT firmware variants.
@@ -77,6 +104,8 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
             if (!_shortcutButtonSlots.TryGetValue(signature, out int slot))
             {
                 slot = _shortcutButtonSlots.Count;
+                Log.Write("Q630MPen", $"Unmapped button pressed! Signature: {signature:X}, Assigned Slot: {slot}");
+                
                 if (slot >= ButtonSlotCount)
                 {
                     return buttons;
