@@ -119,6 +119,67 @@ namespace OpenTabletDriver.Console
             settings.Serialize(file);
         }
 
+        #region Application Profiler
+
+        private static async Task SetAppRule(string windowClass, string presetName)
+        {
+            if (!await EnsureDaemonReady()) return;
+            var settings = await GetSettings();
+
+            settings.AppProfiles ??= new System.Collections.Generic.Dictionary<string, string>();
+            settings.AppProfiles[windowClass] = presetName;
+
+            await Driver.Instance.SetSettings(settings);
+            settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+
+            System.Console.WriteLine($"Mapped window class '{windowClass}' to preset '{presetName}'.");
+        }
+
+        private static async Task RemoveAppRule(string windowClass)
+        {
+            if (!await EnsureDaemonReady()) return;
+            var settings = await GetSettings();
+
+            if (settings.AppProfiles != null && settings.AppProfiles.Remove(windowClass))
+            {
+                await Driver.Instance.SetSettings(settings);
+                settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+                System.Console.WriteLine($"Removed application rule for '{windowClass}'.");
+            }
+            else
+            {
+                System.Console.WriteLine($"Rule for '{windowClass}' not found.");
+            }
+        }
+
+        private static async Task SetDefaultAppRule(string presetName)
+        {
+            if (!await EnsureDaemonReady()) return;
+            var settings = await GetSettings();
+
+            settings.DefaultAppProfile = presetName;
+
+            await Driver.Instance.SetSettings(settings);
+            settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+
+            System.Console.WriteLine($"Set default app profile to '{presetName}'.");
+        }
+
+        private static async Task SetEnableAppProfiler(bool enable)
+        {
+            if (!await EnsureDaemonReady()) return;
+            var settings = await GetSettings();
+
+            settings.EnableAppProfiler = enable;
+
+            await Driver.Instance.SetSettings(settings);
+            settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+
+            System.Console.WriteLine($"Application Profiler enabled: {enable}");
+        }
+
+        #endregion
+
         private static DirectoryInfo GetAndRefreshPresetDirectory()
         {
             var presetDir = new DirectoryInfo(AppInfo.Current.PresetDirectory);

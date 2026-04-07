@@ -98,6 +98,10 @@ namespace OpenTabletDriver.Console
             CreateCommand<string, bool>(SetEnableClipping, "Sets whether inputs should be limited to the specified areas"),
             CreateCommand<string, bool>(SetEnableAreaLimiting, "Sets whether inputs outside of the tablet area should be ignored"),
             CreateCommand<string, bool>(SetLockAspectRatio, "Sets whether to lock tablet width/height to display width/height ratio"),
+            CreateCommand<string, string>(SetAppRule, "Maps a window class to a preset", "add-app-rule"),
+            CreateCommand<string>(RemoveAppRule, "Removes an application preset mapping", "remove-app-rule"),
+            CreateCommand<string>(SetDefaultAppRule, "Sets the default preset for unmapped applications", "set-default-app-rule"),
+            CreateCommand<bool>(SetEnableAppProfiler, "Enables or disables application profiling", "set-enable-app-profiler"),
         ];
 
         private static readonly IEnumerable<Command> RequestCommands =

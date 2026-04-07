@@ -34,10 +34,12 @@ namespace OpenTabletDriver.Daemon
     public class DriverDaemon : IDriverDaemon
     {
         private const string AVALONIA_REVISION = "0.7.0.0";
+        private readonly AppProfileMonitor _appProfileMonitor;
 
         public DriverDaemon(Driver driver)
         {
             Driver = driver;
+            _appProfileMonitor = new AppProfileMonitor(this);
             _logFile = new LogFile(AppInfo.Current.LogDirectory);
 
             Log.Output += (sender, message) =>
@@ -139,7 +141,7 @@ namespace OpenTabletDriver.Daemon
         public event EventHandler? Resynchronize;
 
         public Driver Driver { get; }
-        private Settings? Settings { set; get; }
+        public Settings? Settings { set; get; }
         private Collection<ITool> Tools { set; get; } = new Collection<ITool>();
         private IUpdater Updater = DesktopInterop.Updater;
         private readonly ISleepDetector? SleepDetector = new SleepDetector();
@@ -270,6 +272,8 @@ namespace OpenTabletDriver.Daemon
                     Log.Write("Settings", "Driver is enabled.");
 
                 SetToolSettings();
+
+                _appProfileMonitor.Initialize();
 
                 lastValidSettings = settings;
                 return Task.CompletedTask;

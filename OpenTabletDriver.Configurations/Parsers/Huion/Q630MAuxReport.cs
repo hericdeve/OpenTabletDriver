@@ -19,7 +19,7 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
                 report[4].IsBitSet(5),
             ];
 
-            WheelButtons = 
+            WheelButtons =
             [
                 [report[4].IsBitSet(6)],
                 [report[4].IsBitSet(7)]
