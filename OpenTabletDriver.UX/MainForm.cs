@@ -269,6 +269,27 @@ namespace OpenTabletDriver.UX
             var savePreset = new Command { MenuText = "Save as preset..." };
             savePreset.Executed += async (sender, e) => await SavePresetDialog();
 
+            var saveAppPreset = new Command { MenuText = "Save as app preset..." };
+            saveAppPreset.Executed += async (sender, e) => await SaveAppPresetDialog();
+
+            var toggleAppPresets = new CheckCommand { MenuText = "Enable app profiling" };
+            App.Current.PropertyChanged += (sender, e) =>
+            {
+                if (e.PropertyName == nameof(App.Settings) && App.Current.Settings != null)
+                    toggleAppPresets.Checked = App.Current.Settings.EnableAppProfiler;
+            };
+            toggleAppPresets.Executed += async (sender, e) =>
+            {
+                if (App.Current.Settings is Settings settings)
+                {
+                    settings.EnableAppProfiler = toggleAppPresets.Checked;
+                    await App.Driver.Instance.SetSettings(settings);
+                    settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+                }
+            };
+            if (App.Current.Settings != null)
+                toggleAppPresets.Checked = App.Current.Settings.EnableAppProfiler;
+
             var detectTablet = new Command { MenuText = "Detect tablet", Shortcut = Application.Instance.CommonModifier | Keys.D };
             detectTablet.Executed += async (sender, e) => await DetectTablet();
 
@@ -314,6 +335,8 @@ namespace OpenTabletDriver.UX
                             new SeparatorMenuItem(),
                             refreshPresets,
                             savePreset,
+                            saveAppPreset,
+                            toggleAppPresets,
                             new ButtonMenuItem
                             {
                                 Text = "Presets",
@@ -681,11 +704,62 @@ namespace OpenTabletDriver.UX
             }
         }
 
+        private async Task SaveAppPresetDialog()
+        {
+            var txtName = new TextBox();
+            var txtClass = new TextBox();
+
+            var dialog = new Dialog<DialogResult>
+            {
+                Title = "Save App Preset",
+                WindowStyle = WindowStyle.Default,
+                Content = new TableLayout
+                {
+                    Padding = new Padding(10),
+                    Spacing = new Size(5, 5),
+                    Rows =
+                    {
+                        new TableRow(new Label { Text = "Preset Name:" }, txtName),
+                        new TableRow(new Label { Text = "Window Class:" }, txtClass),
+                        null
+                    }
+                }
+            };
+
+            var ok = new Button { Text = "Save" };
+            ok.Click += (s, e) => dialog.Close(DialogResult.Ok);
+            dialog.DefaultButton = ok;
+
+            var cancel = new Button { Text = "Cancel" };
+            cancel.Click += (s, e) => dialog.Close(DialogResult.Cancel);
+            dialog.AbortButton = cancel;
+
+            dialog.PositiveButtons.Add(ok);
+            dialog.NegativeButtons.Add(cancel);
+
+            if (dialog.ShowModal(this) == DialogResult.Ok && !string.IsNullOrWhiteSpace(txtName.Text) && !string.IsNullOrWhiteSpace(txtClass.Text))
+            {
+                var file = new FileInfo(Path.Combine(AppInfo.Current.PresetDirectory, txtName.Text + ".json"));
+                if (App.Current.Settings is Settings settings)
+                {
+                    settings.Serialize(file);
+                    await RefreshPresets();
+
+                    settings.AppProfiles ??= new Dictionary<string, string>();
+                    settings.AppProfiles[txtClass.Text] = txtName.Text;
+                    settings.EnableAppProfiler = true;
+                    await App.Driver.Instance.SetSettings(settings);
+                    settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+                }
+            }
+        }
+
         public static void PresetButtonHandler(object sender, EventArgs e)
         {
             var presetName = (sender as ButtonMenuItem).Text;
             var preset = AppInfo.PresetManager.FindPreset(presetName);
             App.Current.Settings = preset.Settings;
+            App.Current.Settings.EnableAppProfiler = false;
             App.Driver.Instance.SetSettings(App.Current.Settings);
             Log.Write("Settings", $"Applied preset '{preset.Name}'");
         }

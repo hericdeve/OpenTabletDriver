@@ -66,6 +66,7 @@ namespace OpenTabletDriver.Console
             GetAndRefreshPresetDirectory();
 
             var preset = AppInfo.PresetManager.FindPreset(name);
+            preset.Settings.EnableAppProfiler = false;
             await ApplySettings(preset.Settings);
         }
 
