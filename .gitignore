@@ -25,3 +25,5 @@ BenchmarkDotNet.Artifacts/
 # Nix environment
 [Rr]esult
 .data/
+
+.github/copilot-instructions.md
