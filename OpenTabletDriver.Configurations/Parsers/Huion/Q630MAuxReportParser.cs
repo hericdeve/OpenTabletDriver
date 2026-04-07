@@ -11,12 +11,12 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
     {
         private readonly Dictionary<ulong, int> _shortcutButtonSlots = new()
         {
-            { 0x050000000000, 0 }, // B
-            { 0x080000000000, 1 }, // E
-            { 0x0C0000000000, 2 }, // I
-            { 0x116000000000, 3 }, // Ctrl+S
-            { 0x02C000000000, 4 }, // Space
-            { 0x51D000000000, 5 }  // Ctrl+Alt+Z
+            { 0x050000000000, 0 }, // Button 1
+            { 0x080000000000, 1 }, // Button 2
+            { 0x0C0000000000, 2 }, // Button 3
+            { 0x1160000000000, 3 }, // Button 4
+            { 0x02C0000000000, 4 }, // Button 5
+            { 0x51D0000000000, 5 }  // Button 6
         };
         private const int ButtonSlotCount = 8;
 
