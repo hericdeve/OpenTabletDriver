@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using OpenTabletDriver.Configurations.Parsers.UCLogic;
@@ -30,7 +31,7 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
             if (data.Length >= 8)
             {
                 bool isZero = true;
-                for (int i = 0; i < data.Length; i++)
+                for (int i = 1; i < data.Length; i++)
                 {
                     if (data[i] != 0)
                     {
@@ -43,6 +44,11 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
                 {
                     return new Q630MBluetoothAuxReport(data, new bool[ButtonSlotCount]);
                 }
+            }
+
+            if (data.Length >= 2 && !data[1].IsBitSet(7) && data[1] != 0xE0 && !(data[1].IsBitSet(5) && data[1].IsBitSet(6)) && data[1] != 0xC0 && data[1] != 0xF1) 
+            {
+                Log.Write("Q630MMystery", BitConverter.ToString(data));
             }
 
             if (data[1] == 0xF1)
