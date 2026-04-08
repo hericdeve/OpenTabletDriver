@@ -12,12 +12,18 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
     {
         private readonly Dictionary<ulong, int> _shortcutButtonSlots = new()
         {
-            { 0x050000000000, 0 }, // Button 1
-            { 0x080000000000, 1 }, // Button 2
-            { 0x0C0000000000, 2 }, // Button 3
-            { 0x1160000000000, 3 }, // Button 4
-            { 0x02C0000000000, 4 }, // Button 5
-            { 0x51D0000000000, 5 }  // Button 6
+            { 0x0005, 0 },
+            { 0x0500, 0 },
+            { 0x0008, 1 },
+            { 0x0800, 1 },
+            { 0x000C, 2 },
+            { 0x0C00, 2 },
+            { 0x0116, 3 },
+            { 0x1601, 3 },
+            { 0x002C, 4 },
+            { 0x2C00, 4 },
+            { 0x051D, 5 },
+            { 0x1D05, 5 }
         };
         private const int ButtonSlotCount = 8;
 
@@ -82,12 +88,9 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
         private bool[] DecodeShortcutButtons(byte[] data)
         {
             var buttons = new bool[ButtonSlotCount];
+            if (data.Length < 4) return buttons;
 
-            ulong signature = 0;
-            for (int i = 2; i < data.Length; i++)
-            {
-                signature = (signature << 8) | data[i];
-            }
+            ulong signature = (ulong)((data[2] << 8) | data[3]);
 
             if (signature == 0)
             {
@@ -96,18 +99,14 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
 
             if (!_shortcutButtonSlots.TryGetValue(signature, out int slot))
             {
-                slot = _shortcutButtonSlots.Count;
-                Log.Write("Q630MAux", $"Unmapped button pressed! Signature: {signature:X}, Assigned Slot: {slot}");
-                
-                if (slot >= ButtonSlotCount)
-                {
-                    return buttons;
-                }
-
-                _shortcutButtonSlots[signature] = slot;
+                Log.Write("Q630MAux", $"Unmapped button signature: {signature:X4}");
+                return buttons;
             }
 
-            buttons[slot] = true;
+            if (slot < ButtonSlotCount)
+            {
+                buttons[slot] = true;
+            }
             return buttons;
         }
 
