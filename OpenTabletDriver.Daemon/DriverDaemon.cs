@@ -686,23 +686,7 @@ namespace OpenTabletDriver.Daemon
         private void PostDebugReport(TabletReference tablet, IDeviceReport report)
         {
             if (report != null && tablet != null)
-            {
-                if (tablet.Properties.Name == "Huion Q630M" && report.Raw.Length > 1)
-                {
-                    bool isWheelPacket = report.Raw[1] == 0xF1;
-                    bool hasWheelButton = report is Plugin.Tablet.Wheel.IWheelButtonReport wheelButtons &&
-                                          wheelButtons.WheelButtons.Any(w => w.Any(x => x));
-
-                    if (isWheelPacket || hasWheelButton)
-                    {
-                        Log.Write(
-                            "Q630MDebug",
-                            $"{report.GetType().Name} {BitConverter.ToString(report.Raw)} | {ReportFormatter.GetStringFormat(report).Replace(Environment.NewLine, " | ").Trim()}");
-                    }
-                }
-
                 DeviceReport?.Invoke(this, new DebugReportData(tablet, report));
-            }
         }
 
         public async Task<SerializedUpdateInfo?> CheckForUpdates()
