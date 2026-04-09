@@ -177,6 +177,17 @@ namespace OpenTabletDriver.Desktop
             }
         }
 
+        public Settings Clone()
+        {
+            using var sw = new StringWriter();
+            using (var jw = new JsonTextWriter(sw))
+                serializer.Serialize(jw, this);
+
+            using var sr = new StringReader(sw.ToString());
+            using var jr = new JsonTextReader(sr);
+            return serializer.Deserialize<Settings>(jr);
+        }
+
         #endregion
     }
 }

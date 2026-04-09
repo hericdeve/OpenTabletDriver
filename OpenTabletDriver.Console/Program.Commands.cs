@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using OpenTabletDriver.Desktop;
 using OpenTabletDriver.Desktop.Diagnostics;
 using OpenTabletDriver.Desktop.Interop;
@@ -66,8 +67,9 @@ namespace OpenTabletDriver.Console
             GetAndRefreshPresetDirectory();
 
             var preset = AppInfo.PresetManager.FindPreset(name);
-            preset.Settings.EnableAppProfiler = false;
-            await ApplySettings(preset.Settings);
+            var settingsToApply = preset.Settings.Clone();
+            settingsToApply.EnableAppProfiler = false;
+            await ApplySettings(settingsToApply);
         }
 
         private static async Task GetCurrentPreset()
@@ -76,12 +78,12 @@ namespace OpenTabletDriver.Console
             GetAndRefreshPresetDirectory();
 
             var currentSettings = await Driver.Instance.GetSettings();
-            var serializedCurrent = SerializeSettings(currentSettings);
+            var normalizedCurrent = NormalizePresetComparableSettings(currentSettings);
 
             foreach (var preset in AppInfo.PresetManager.GetPresets())
             {
-                var serializedPreset = SerializeSettings(preset.Settings);
-                if (serializedCurrent == serializedPreset)
+                var normalizedPreset = NormalizePresetComparableSettings(preset.Settings);
+                if (JToken.DeepEquals(normalizedCurrent, normalizedPreset))
                 {
                     System.Console.WriteLine(preset.Name);
                     return;
@@ -89,6 +91,27 @@ namespace OpenTabletDriver.Console
             }
 
             System.Console.WriteLine("Custom");
+        }
+
+        private static readonly string[] IgnoredPresetComparisonProperties =
+        {
+            nameof(Settings.Revision),
+            nameof(Settings.EnableAppProfiler),
+            nameof(Settings.DefaultAppProfile),
+            nameof(Settings.AppProfiles)
+        };
+
+        private static JToken NormalizePresetComparableSettings(Settings settings)
+        {
+            var normalized = JToken.Parse(SerializeSettings(settings));
+
+            if (normalized is JObject obj)
+            {
+                foreach (var propertyName in IgnoredPresetComparisonProperties)
+                    obj.Remove(propertyName);
+            }
+
+            return normalized;
         }
 
         private static string SerializeSettings(Settings settings)

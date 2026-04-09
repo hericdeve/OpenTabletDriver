@@ -222,7 +222,15 @@ namespace OpenTabletDriver.Daemon
             try
             {
                 foreach (var dev in Driver.InputDevices)
+                {
+                    if (dev.OutputMode?.Elements != null)
+                    {
+                        foreach (var bindingHandler in dev.OutputMode.Elements.OfType<BindingHandler>())
+                            bindingHandler.ReleaseAllBindings();
+                    }
+
                     dev.OutputMode?.Dispose();
+                }
 
                 Settings = settings ??= Settings.GetDefaults();
 

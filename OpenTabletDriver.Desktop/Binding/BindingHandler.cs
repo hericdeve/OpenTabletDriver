@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Attributes;
 using OpenTabletDriver.Plugin.Output;
@@ -65,6 +66,27 @@ namespace OpenTabletDriver.Desktop.Binding
                 HandleRelativeWheelReport(tablet, relativeWheelReport);
             if (report is OutOfRangeReport)
                 HandleOutOfRangeReport(tablet, report);
+        }
+
+        public void ReleaseAllBindings()
+        {
+            var report = new OutOfRangeReport(Array.Empty<byte>());
+
+            Tip?.Invoke(tablet, report, false);
+            Eraser?.Invoke(tablet, report, false);
+
+            ReleaseBindingCollection(tablet, report, PenButtons);
+            ReleaseBindingCollection(tablet, report, AuxButtons);
+            ReleaseBindingCollection(tablet, report, MouseButtons);
+
+            MouseScrollDown?.Invoke(tablet, report, false);
+            MouseScrollUp?.Invoke(tablet, report, false);
+
+            foreach (var wheel in Wheels.Values)
+            {
+                ReleaseBindingCollection(tablet, report, wheel.WheelButtons);
+                wheel.Reset();
+            }
         }
 
         private readonly HashSet<int> _triedRelativeWheels = [];
@@ -165,6 +187,12 @@ namespace OpenTabletDriver.Desktop.Binding
                 if (bindings.TryGetValue(i, out var binding))
                     binding?.Invoke(tablet, report, newStates[i]);
             }
+        }
+
+        private static void ReleaseBindingCollection(TabletReference tablet, IDeviceReport report, Dictionary<int, BindingState?> bindings)
+        {
+            foreach (var binding in bindings.Values.Where(binding => binding != null))
+                binding!.Invoke(tablet, report, false);
         }
     }
 }

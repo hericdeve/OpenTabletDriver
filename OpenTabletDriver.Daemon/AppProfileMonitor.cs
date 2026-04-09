@@ -79,11 +79,14 @@ namespace OpenTabletDriver.Daemon
                         Log.Write("AppProfileMonitor", $"Applying preset '{preset.Name}' for application '{windowClass}'.", LogLevel.Info);
                         Console.WriteLine($"[AppProfiler] Switching to preset '{preset.Name}' for application '{windowClass}'");
 
-                        preset.Settings.EnableAppProfiler = settings.EnableAppProfiler;
-                        preset.Settings.AppProfiles = settings.AppProfiles;
-                        preset.Settings.DefaultAppProfile = settings.DefaultAppProfile;
+                        var appliedSettings = preset.Settings.Clone();
+                        appliedSettings.EnableAppProfiler = settings.EnableAppProfiler;
+                        appliedSettings.AppProfiles = settings.AppProfiles != null
+                            ? new Dictionary<string, string>(settings.AppProfiles)
+                            : new Dictionary<string, string>();
+                        appliedSettings.DefaultAppProfile = settings.DefaultAppProfile;
 
-                        _ = _daemon.SetSettings(preset.Settings);
+                        _ = _daemon.SetSettings(appliedSettings);
                         _currentPreset = presetName;
                     }
                     else
@@ -101,11 +104,14 @@ namespace OpenTabletDriver.Daemon
                     Log.Write("AppProfileMonitor", $"Applying default preset '{preset.Name}'.", LogLevel.Info);
                     Console.WriteLine($"[AppProfiler] Reverting to default preset '{preset.Name}' for application '{windowClass}'");
 
-                    preset.Settings.EnableAppProfiler = settings.EnableAppProfiler;
-                    preset.Settings.AppProfiles = settings.AppProfiles;
-                    preset.Settings.DefaultAppProfile = settings.DefaultAppProfile;
+                    var appliedSettings = preset.Settings.Clone();
+                    appliedSettings.EnableAppProfiler = settings.EnableAppProfiler;
+                    appliedSettings.AppProfiles = settings.AppProfiles != null
+                        ? new Dictionary<string, string>(settings.AppProfiles)
+                        : new Dictionary<string, string>();
+                    appliedSettings.DefaultAppProfile = settings.DefaultAppProfile;
 
-                    _ = _daemon.SetSettings(preset.Settings);
+                    _ = _daemon.SetSettings(appliedSettings);
                     _currentPreset = settings.DefaultAppProfile;
                 }
             }

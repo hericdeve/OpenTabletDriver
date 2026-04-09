@@ -36,7 +36,7 @@ namespace OpenTabletDriver.Desktop.Binding
 
                 if (preset != null && Daemon != null)
                 {
-                    Daemon.SetSettings(preset.Settings);
+                    Daemon.SetSettings(preset.Settings.Clone());
                     Daemon.ForceResynchronize();
                     Log.Write("Settings", $"Applied preset '{preset.Name}'.");
                 }
