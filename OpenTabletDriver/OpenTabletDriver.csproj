@@ -19,7 +19,7 @@
 
   <ItemGroup Label="NuGet Packages">
     <!-- Remove NuGet HidSharpCore reference -->
-    <ProjectReference Include="../../HidSharpCore/HidSharp/HidSharp.csproj" />
+    <ProjectReference Include="../../HIDSharpCore/HidSharp/HidSharp.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
