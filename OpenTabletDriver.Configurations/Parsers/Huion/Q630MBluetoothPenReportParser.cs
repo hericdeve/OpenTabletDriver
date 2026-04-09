@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using OpenTabletDriver.Configurations.Parsers.UCLogic;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Tablet;
 
@@ -76,11 +75,6 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
                     return new DeviceReport(data);
                 }
 
-                if (LooksLikeLegacyBitfieldPacket(data))
-                {
-                    return new UCLogicAuxReport(data);
-                }
-
                 return new Q630MBluetoothAuxReport(data, DecodeShortcutButtons(data));
             }
 
@@ -102,6 +96,19 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
         {
             var buttons = new bool[ButtonSlotCount];
             if (data.Length < 4) return buttons;
+
+            if (LooksLikeLegacyBitfieldPacket(data))
+            {
+                buttons[0] = data[4].IsBitSet(0);
+                buttons[1] = data[4].IsBitSet(1);
+                buttons[2] = data[4].IsBitSet(2);
+                buttons[3] = data[4].IsBitSet(3);
+                buttons[4] = data[4].IsBitSet(4);
+                buttons[5] = data[4].IsBitSet(5);
+                buttons[6] = data[4].IsBitSet(6);
+                buttons[7] = data[4].IsBitSet(7);
+                return buttons;
+            }
 
             ulong signature = (ulong)((data[2] << 8) | data[3]);
 
