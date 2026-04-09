@@ -43,5 +43,48 @@ namespace OpenTabletDriver.Tests
             Assert.False(auxReport.WheelButtons[0][0]);
             Assert.False(auxReport.WheelButtons[1][0]);
         }
+
+        [Fact]
+        public void SharedDialParser_RoutesBluetoothRotationToWheel1()
+        {
+            var parser = new Q630MBluetoothSharedDialReportParser();
+
+            var report = Assert.IsType<Q630MBluetoothSharedDialReport>(
+                parser.Parse([0x03, 0xF1, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
+
+            Assert.Equal(1, report.AnalogDeltas[0]);
+            Assert.Equal(0, report.AnalogDeltas[1]);
+            Assert.False(report.WheelButtons[0][0]);
+            Assert.False(report.WheelButtons[1][0]);
+        }
+
+        [Fact]
+        public void SharedDialParser_RoutesBluetoothNegativeRotationToWheel1()
+        {
+            var parser = new Q630MBluetoothSharedDialReportParser();
+
+            var report = Assert.IsType<Q630MBluetoothSharedDialReport>(
+                parser.Parse([0x03, 0xF1, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]));
+
+            Assert.Equal(-1, report.AnalogDeltas[0]);
+            Assert.Equal(0, report.AnalogDeltas[1]);
+        }
+
+        [Theory]
+        [InlineData(0x02, true)]
+        [InlineData(0x03, true)]
+        [InlineData(0x00, false)]
+        public void SharedDialParser_RoutesBluetoothDialButtonToWheel1(byte packetType, bool expectedPressed)
+        {
+            var parser = new Q630MBluetoothSharedDialReportParser();
+
+            var report = Assert.IsType<Q630MBluetoothSharedDialReport>(
+                parser.Parse([0x03, 0xF1, packetType, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
+
+            Assert.Equal(0, report.AnalogDeltas[0]);
+            Assert.True(report.WheelButtons.Length >= 2);
+            Assert.Equal(expectedPressed, report.WheelButtons[0][0]);
+            Assert.False(report.WheelButtons[1][0]);
+        }
     }
 }
