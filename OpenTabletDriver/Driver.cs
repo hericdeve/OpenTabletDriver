@@ -110,8 +110,9 @@ namespace OpenTabletDriver
 
                     if ((config.AuxiliaryDeviceIdentifiers?.Count ?? 0) > 0)
                     {
-                        if (MatchDevice(config, config.AuxiliaryDeviceIdentifiers!) is InputDevice aux)
-                            devices.Add(aux);
+                        var auxiliaryDevices = MatchDevices(config, config.AuxiliaryDeviceIdentifiers!);
+                        if (auxiliaryDevices.Count > 0)
+                            devices.AddRange(auxiliaryDevices);
                         else
                             Log.Write("Detect", "Failed to find auxiliary device, express keys may be unavailable.", LogLevel.Warning);
                     }
@@ -159,7 +160,7 @@ namespace OpenTabletDriver
                 {
                     try
                     {
-                        return new InputDevice(this, dev, config, identifier);
+                        return CreateInputDevice(dev, config, identifier);
                     }
                     catch (Exception ex)
                     {
@@ -168,6 +169,43 @@ namespace OpenTabletDriver
                 }
             }
             return null;
+        }
+
+        private List<InputDevice> MatchDevices(TabletConfiguration config, IList<DeviceIdentifier> identifiers)
+        {
+            var devices = new List<InputDevice>();
+            var matchedPaths = new HashSet<string>();
+
+            foreach (var identifier in identifiers)
+            {
+                var matches = GetMatchingDevices(config, identifier);
+
+                if (matches.Count() > 1)
+                    Log.Write("Detect", "More than 1 matching device has been found.", LogLevel.Warning);
+
+                foreach (IDeviceEndpoint dev in matches)
+                {
+                    if (!matchedPaths.Add(dev.DevicePath))
+                        continue;
+
+                    try
+                    {
+                        devices.Add(CreateInputDevice(dev, config, identifier));
+                    }
+                    catch (Exception ex)
+                    {
+                        matchedPaths.Remove(dev.DevicePath);
+                        Log.Exception(ex, LogLevel.Warning);
+                    }
+                }
+            }
+
+            return devices;
+        }
+
+        protected virtual InputDevice CreateInputDevice(IDeviceEndpoint device, TabletConfiguration configuration, DeviceIdentifier identifier)
+        {
+            return new InputDevice(this, device, configuration, identifier);
         }
 
         private IEnumerable<IDeviceEndpoint> GetMatchingDevices(TabletConfiguration configuration, DeviceIdentifier identifier)
