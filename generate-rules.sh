@@ -68,5 +68,10 @@ while read s; do
 
   if [[ $libinput > 0 ]]; then
     echo SUBSYSTEM==\"input\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ENV{LIBINPUT_IGNORE_DEVICE}=\"$libinput\"
+    echo SUBSYSTEM==\"input\", ATTR{id/vendor}==\"$vid\", ATTR{id/product}==\"$pid\", ENV{LIBINPUT_IGNORE_DEVICE}=\"$libinput\"
+    printf '%s\n' 'ACTION=="add", SUBSYSTEM=="input", ATTRS{idVendor}=="'"$vid"'", ATTRS{idProduct}=="'"$pid"'", ATTR{name}=="*Keyboard", RUN+="/usr/bin/sh -c '\''echo 1 > /sys$devpath/inhibited'\''"'
+    printf '%s\n' 'ACTION=="change", SUBSYSTEM=="input", ATTRS{idVendor}=="'"$vid"'", ATTRS{idProduct}=="'"$pid"'", ATTR{name}=="*Keyboard", RUN+="/usr/bin/sh -c '\''echo 1 > /sys$devpath/inhibited'\''"'
+    printf '%s\n' 'ACTION=="add", SUBSYSTEM=="input", ATTR{id/vendor}=="'"$vid"'", ATTR{id/product}=="'"$pid"'", ATTR{name}=="*Keyboard", RUN+="/usr/bin/sh -c '\''echo 1 > /sys$devpath/inhibited'\''"'
+    printf '%s\n' 'ACTION=="change", SUBSYSTEM=="input", ATTR{id/vendor}=="'"$vid"'", ATTR{id/product}=="'"$pid"'", ATTR{name}=="*Keyboard", RUN+="/usr/bin/sh -c '\''echo 1 > /sys$devpath/inhibited'\''"'
   fi
 done <<< $configs_arr

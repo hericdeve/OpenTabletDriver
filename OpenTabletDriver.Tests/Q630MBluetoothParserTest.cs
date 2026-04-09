@@ -44,6 +44,42 @@ namespace OpenTabletDriver.Tests
             Assert.False(auxReport.WheelButtons[1][0]);
         }
 
+        [Theory]
+        [InlineData(0x00, 0x16, 3)]
+        [InlineData(0x01, 0x16, 3)]
+        [InlineData(0x05, 0x1D, 5)]
+        [InlineData(0x01, 0x1D, 5)]
+        public void AuxParser_KeycodeFallback_MapsButtonsWithVaryingModifierBytes(byte modifier, byte keycode, int expectedSlot)
+        {
+            var parser = new Q630MAuxReportParser();
+
+            var report = Assert.IsType<Q630MBluetoothAuxReport>(
+                parser.Parse([0x00, 0xE0, modifier, keycode, 0x00, 0x00, 0x00, 0x00]));
+
+            for (int i = 0; i < report.AuxButtons.Length; i++)
+            {
+                Assert.Equal(i == expectedSlot, report.AuxButtons[i]);
+            }
+        }
+
+        [Theory]
+        [InlineData(0x00, 0x16, 3)]
+        [InlineData(0x01, 0x16, 3)]
+        [InlineData(0x05, 0x1D, 5)]
+        [InlineData(0x01, 0x1D, 5)]
+        public void PenParser_KeycodeFallback_MapsButtonsWithVaryingModifierBytes(byte modifier, byte keycode, int expectedSlot)
+        {
+            var parser = new Q630MBluetoothPenReportParser();
+
+            var report = Assert.IsType<Q630MBluetoothAuxReport>(
+                parser.Parse([0x00, 0xE0, modifier, keycode, 0x00, 0x00, 0x00, 0x00]));
+
+            for (int i = 0; i < report.AuxButtons.Length; i++)
+            {
+                Assert.Equal(i == expectedSlot, report.AuxButtons[i]);
+            }
+        }
+
         [Fact]
         public void SharedDialParser_RoutesBluetoothRotationToWheel1()
         {

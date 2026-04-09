@@ -24,6 +24,15 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
             { 0x051D, 5 },
             { 0x1D05, 5 }
         };
+        private readonly Dictionary<byte, int> _shortcutButtonKeySlots = new()
+        {
+            { 0x05, 0 },
+            { 0x08, 1 },
+            { 0x0C, 2 },
+            { 0x16, 3 },
+            { 0x2C, 4 },
+            { 0x1D, 5 }
+        };
         private const int ButtonSlotCount = 8;
 
         public IDeviceReport Parse(byte[] data)
@@ -104,7 +113,8 @@ namespace OpenTabletDriver.Configurations.Parsers.Huion
                 return buttons;
             }
 
-            if (!_shortcutButtonSlots.TryGetValue(signature, out int slot))
+            if (!_shortcutButtonSlots.TryGetValue(signature, out int slot) &&
+                !_shortcutButtonKeySlots.TryGetValue((byte)(signature & 0xFF), out slot))
             {
                 Log.Write("Q630MAux", $"Unmapped button signature: {signature:X4}");
                 return buttons;
