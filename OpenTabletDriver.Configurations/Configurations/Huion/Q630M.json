@@ -67,7 +67,7 @@
     {
       "VendorID": 9580,
       "ProductID": 33361,
-      "ReportParser": "OpenTabletDriver.Configurations.Parsers.Huion.Q630MBluetoothDialCaptureReportParser",
+      "ReportParser": "OpenTabletDriver.Configurations.Parsers.Huion.Q630MBluetoothSharedDialReportParser",
       "Attributes": {
         "HID_REPORTS": "0001:000E"
       }
