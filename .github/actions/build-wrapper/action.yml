@@ -27,7 +27,7 @@ runs:
           git config --system --add safe.directory /__w/OpenTabletDriver/OpenTabletDriver
 
     - name: "Install rcodesign (macOS builds)"
-      if: inputs.package-name == 'macos'
+      if: inputs.package-name == 'macos-signed'
       shell: bash
       run: cargo install apple-codesign
 

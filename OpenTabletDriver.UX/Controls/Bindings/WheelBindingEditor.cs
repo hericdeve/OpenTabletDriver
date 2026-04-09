@@ -112,7 +112,7 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                     // e.g. switching from a tablet with a Minimum/StepSize of 15 to a tablet with StepSize 5 would
                     //   cause the 2nd tablet to have its values increased to the minimum if they were below this
                     clockwiseThreshold.Minimum = clockwiseThreshold.StepSize =
-                        counterClockwiseThreshold.Minimum = clockwiseThreshold.StepSize = 1;
+                        counterClockwiseThreshold.Minimum = counterClockwiseThreshold.StepSize = 1;
 
                     this.DataContext = wheel;
 
@@ -120,7 +120,7 @@ namespace OpenTabletDriver.UX.Controls.Bindings
 
                     // manually handle Minimum and StepSize part 2 of 2
                     clockwiseThreshold.Minimum = clockwiseThreshold.StepSize =
-                        counterClockwiseThreshold.Minimum = clockwiseThreshold.StepSize = (int)wheel.StepSize.Value;
+                        counterClockwiseThreshold.Minimum = counterClockwiseThreshold.StepSize = (int)wheel.StepSize.Value;
                 }
             };
 
