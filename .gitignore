@@ -34,3 +34,4 @@ global.json
 eng/bash/Arch/no-build
 eng/bash/Arch/opentabletdriver.install
 eng/bash/Arch/package.sh
+generate-rules.sh
