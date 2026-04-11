@@ -9,6 +9,7 @@
 /*/obj/
 /*/bin/
 /bin/
+/pkg/
 nupkg/
 [Bb]uild/
 /dist/
@@ -27,3 +28,9 @@ BenchmarkDotNet.Artifacts/
 .data/
 
 .github/copilot-instructions.md
+create-arch-bin-package.sh
+create-arch-package.sh
+global.json
+eng/bash/Arch/no-build
+eng/bash/Arch/opentabletdriver.install
+eng/bash/Arch/package.sh
