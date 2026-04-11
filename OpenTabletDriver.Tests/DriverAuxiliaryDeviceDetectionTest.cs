@@ -107,8 +107,9 @@ namespace OpenTabletDriver.Tests
             };
         }
 
-        private static DeviceIdentifier CreateIdentifier(string devicePath) =>
-            new()
+        private static DeviceIdentifier CreateIdentifier(string devicePath, string? hidReports = null)
+        {
+            var identifier = new DeviceIdentifier
             {
                 VendorID = 1,
                 ProductID = 2,
@@ -119,16 +120,29 @@ namespace OpenTabletDriver.Tests
                 }
             };
 
-        private static IDeviceEndpoint CreateEndpoint(string devicePath)
+            if (hidReports != null)
+            {
+                identifier.Attributes["HID_REPORTS"] = hidReports;
+            }
+
+            return identifier;
+        }
+
+        private static IDeviceEndpoint CreateEndpoint(string devicePath, string? hidReports = null)
         {
             var endpoint = Substitute.For<IDeviceEndpoint>();
             endpoint.VendorID.Returns(1);
             endpoint.ProductID.Returns(2);
             endpoint.CanOpen.Returns(true);
             endpoint.DevicePath.Returns(devicePath);
-            endpoint.DeviceAttributes.Returns(new Dictionary<string, string>());
+            var attributes = new Dictionary<string, string>();
+            if (hidReports != null)
+            {
+                attributes["HID_REPORTS"] = hidReports;
+            }
+            endpoint.DeviceAttributes.Returns(attributes);
             endpoint.FriendlyName.Returns(devicePath);
-            endpoint.Open().Returns(new BlockingStream());
+            endpoint.Open().Returns(_ => new BlockingStream());
             endpoint.GetDeviceString(Arg.Any<byte>()).Returns(string.Empty);
             return endpoint;
         }

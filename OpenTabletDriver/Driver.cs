@@ -112,7 +112,7 @@ namespace OpenTabletDriver
                     {
                         var auxiliaryDevices = MatchDevices(config,
                                                             config.AuxiliaryDeviceIdentifiers!,
-                                                            new HashSet<string> { digitizer.Endpoint.DevicePath });
+                                                            new HashSet<string> { GetDeviceMatchKey(digitizer.Endpoint, digitizer.Identifier) });
                         if (auxiliaryDevices.Count > 0)
                             devices.AddRange(auxiliaryDevices);
                         else
@@ -173,10 +173,10 @@ namespace OpenTabletDriver
             return null;
         }
 
-        private List<InputDevice> MatchDevices(TabletConfiguration config, IList<DeviceIdentifier> identifiers, HashSet<string>? excludedPaths = null)
+        private List<InputDevice> MatchDevices(TabletConfiguration config, IList<DeviceIdentifier> identifiers, HashSet<string>? excludedKeys = null)
         {
             var devices = new List<InputDevice>();
-            var matchedPaths = excludedPaths ?? new HashSet<string>();
+            var matchedKeys = excludedKeys ?? new HashSet<string>();
 
             foreach (var identifier in identifiers)
             {
@@ -187,7 +187,8 @@ namespace OpenTabletDriver
 
                 foreach (IDeviceEndpoint dev in matches)
                 {
-                    if (!matchedPaths.Add(dev.DevicePath))
+                    var matchKey = GetDeviceMatchKey(dev, identifier);
+                    if (!matchedKeys.Add(matchKey))
                         continue;
 
                     try
@@ -196,7 +197,7 @@ namespace OpenTabletDriver
                     }
                     catch (Exception ex)
                     {
-                        matchedPaths.Remove(dev.DevicePath);
+                        matchedKeys.Remove(matchKey);
                         Log.Exception(ex, LogLevel.Warning);
                     }
                 }
@@ -208,6 +209,18 @@ namespace OpenTabletDriver
         protected virtual InputDevice CreateInputDevice(IDeviceEndpoint device, TabletConfiguration configuration, DeviceIdentifier identifier)
         {
             return new InputDevice(this, device, configuration, identifier);
+        }
+
+        private static string GetDeviceMatchKey(IDeviceEndpoint device, DeviceIdentifier identifier)
+        {
+            string hidReports = string.Empty;
+            if (identifier.Attributes != null &&
+                identifier.Attributes.TryGetValue("HID_REPORTS", out var value))
+            {
+                hidReports = value;
+            }
+
+            return $"{device.DevicePath}::{hidReports}";
         }
 
         private IEnumerable<IDeviceEndpoint> GetMatchingDevices(TabletConfiguration configuration, DeviceIdentifier identifier)
