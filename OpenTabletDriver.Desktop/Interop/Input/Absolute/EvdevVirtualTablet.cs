@@ -153,8 +153,10 @@ namespace OpenTabletDriver.Desktop.Interop.Input.Absolute
         {
             PenAction.Tip => null, // tip is handled via pressure
             PenAction.Eraser => null, // eraser is handled via pressure
-            PenAction.BarrelButton1 => EventCode.BTN_STYLUS2, // STYLUS2 = right click
-            PenAction.BarrelButton2 => EventCode.BTN_STYLUS,
+            // Keep the default adaptive pen-button mapping aligned with Linux Artist Mode
+            // and the kernel's primary/secondary stylus button ordering.
+            PenAction.BarrelButton1 => EventCode.BTN_STYLUS,
+            PenAction.BarrelButton2 => EventCode.BTN_STYLUS2,
             PenAction.BarrelButton3 => EventCode.BTN_STYLUS3,
             _ => null,
         };

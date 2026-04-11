@@ -110,7 +110,9 @@ namespace OpenTabletDriver
 
                     if ((config.AuxiliaryDeviceIdentifiers?.Count ?? 0) > 0)
                     {
-                        var auxiliaryDevices = MatchDevices(config, config.AuxiliaryDeviceIdentifiers!);
+                        var auxiliaryDevices = MatchDevices(config,
+                                                            config.AuxiliaryDeviceIdentifiers!,
+                                                            new HashSet<string> { digitizer.Endpoint.DevicePath });
                         if (auxiliaryDevices.Count > 0)
                             devices.AddRange(auxiliaryDevices);
                         else
@@ -171,10 +173,10 @@ namespace OpenTabletDriver
             return null;
         }
 
-        private List<InputDevice> MatchDevices(TabletConfiguration config, IList<DeviceIdentifier> identifiers)
+        private List<InputDevice> MatchDevices(TabletConfiguration config, IList<DeviceIdentifier> identifiers, HashSet<string>? excludedPaths = null)
         {
             var devices = new List<InputDevice>();
-            var matchedPaths = new HashSet<string>();
+            var matchedPaths = excludedPaths ?? new HashSet<string>();
 
             foreach (var identifier in identifiers)
             {

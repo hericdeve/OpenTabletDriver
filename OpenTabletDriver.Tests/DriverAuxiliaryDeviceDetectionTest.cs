@@ -42,6 +42,35 @@ namespace OpenTabletDriver.Tests
                 detectedTablet.InputDevices.Select(device => device.Endpoint.DevicePath).OrderBy(path => path).ToArray());
         }
 
+        [Fact]
+        public void Detect_DoesNotAttachAuxiliaryDeviceOnDigitizerPath()
+        {
+            var parser = Substitute.For<IReportParser<IDeviceReport>>();
+            parser.Parse(Arg.Any<byte[]>()).Returns(call => new DeviceReport(call.Arg<byte[]>()));
+
+            var parserProvider = Substitute.For<IReportParserProvider>();
+            parserProvider.GetReportParser(Arg.Any<string>()).Returns(parser);
+
+            var configurationProvider = Substitute.For<IDeviceConfigurationProvider>();
+            configurationProvider.TabletConfigurations.Returns([CreateTabletConfigurationWithOverlappingAuxiliaryPath()]);
+
+            var hub = new StubCompositeDeviceHub(
+            [
+                CreateEndpoint("shared"),
+                CreateEndpoint("aux-2")
+            ]);
+
+            using var driver = new Driver(hub, parserProvider, configurationProvider);
+
+            Assert.True(driver.Detect());
+
+            var detectedTablet = Assert.Single(driver.InputDevices);
+            Assert.Equal(2, detectedTablet.InputDevices.Count);
+            Assert.Equal(
+                ["aux-2", "shared"],
+                detectedTablet.InputDevices.Select(device => device.Endpoint.DevicePath).OrderBy(path => path).ToArray());
+        }
+
         private static TabletConfiguration CreateTabletConfiguration()
         {
             return new TabletConfiguration
@@ -55,6 +84,24 @@ namespace OpenTabletDriver.Tests
                 AuxiliaryDeviceIdentifiers =
                 [
                     CreateIdentifier("aux-1"),
+                    CreateIdentifier("aux-2")
+                ]
+            };
+        }
+
+        private static TabletConfiguration CreateTabletConfigurationWithOverlappingAuxiliaryPath()
+        {
+            return new TabletConfiguration
+            {
+                Name = "Overlapping Aux Test Tablet",
+                Specifications = new TabletSpecifications(),
+                DigitizerIdentifiers =
+                [
+                    CreateIdentifier("shared")
+                ],
+                AuxiliaryDeviceIdentifiers =
+                [
+                    CreateIdentifier("shared"),
                     CreateIdentifier("aux-2")
                 ]
             };

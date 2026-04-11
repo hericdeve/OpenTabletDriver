@@ -5,6 +5,8 @@ using OpenTabletDriver.Plugin;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace OpenTabletDriver.Configurations.Parsers.Huion
 {
@@ -188,6 +190,45 @@ public struct Q630MBluetoothAuxReport : IAuxReport, IWheelButtonReport
         public bool[][] WheelButtons { set; get; }
         public byte[] Raw { set; get; }
     }
+public struct Q630MBluetoothTabletReport : ITabletReport
+    {
+        public Q630MBluetoothTabletReport(byte[] report)
+            : this(report, GetDefaultPenButtons(report))
+        {
+        }
+
+        public Q630MBluetoothTabletReport(byte[] report, bool[] penButtons)
+        {
+            Raw = report;
+
+            Position = new Vector2
+            {
+                X = Unsafe.ReadUnaligned<ushort>(ref report[2]),
+                Y = Unsafe.ReadUnaligned<ushort>(ref report[4])
+            };
+            Pressure = Unsafe.ReadUnaligned<ushort>(ref report[6]);
+            PenButtons = penButtons;
+        }
+
+        public byte[] Raw { get; set; }
+        public Vector2 Position { get; set; }
+        public uint Pressure { get; set; }
+        public bool[] PenButtons { get; set; }
+
+        private static bool[] GetDefaultPenButtons(byte[] report)
+        {
+            // Q630M Bluetooth appears to expose two logical pen buttons, while the
+            // generic tablet report shape assumes three bits. Treat the second
+            // logical button as the union of bits 2 and 3 so alternating firmware
+            // status packets don't drop the hold state on button 2.
+            var penByte = report[1];
+            return
+            [
+                penByte.IsBitSet(1),
+                penByte.IsBitSet(2) || penByte.IsBitSet(3),
+            ];
+        }
+    }
 [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     public class Q630MBluetoothPenReportParser : IReportParser<IDeviceReport>
     {
@@ -216,6 +257,10 @@ public struct Q630MBluetoothAuxReport : IAuxReport, IWheelButtonReport
             { 0x1D, 5 }
         };
         private const int ButtonSlotCount = 8;
+        private bool[] _previousPenButtons = new bool[2];
+        private uint _previousPressure;
+        private int _consecutiveClearButtonPackets;
+        private int _consecutiveZeroPressurePackets;
 
         public IDeviceReport Parse(byte[] data)
         {
@@ -258,19 +303,20 @@ public struct Q630MBluetoothAuxReport : IAuxReport, IWheelButtonReport
                 return new KamvasRelWheelReport(data);
             }
 
-            // Aux/button reports can be emitted in UCLogic-style packets.
-            if (data[1] == 0xE0 || (data[1].IsBitSet(5) && data[1].IsBitSet(6)))
+            // Some firmware variants reuse the pen endpoint for shortcut packets, but
+            // normal in-range pen packets also carry the same high status bits. Only
+            // treat these as aux reports when they actually decode into known shortcut
+            // state, otherwise keep them on the pen path.
+            if (LooksLikeBluetoothShortcutPacket(data))
             {
-                if (data.Length < 4)
-                {
-                    return new DeviceReport(data);
-                }
-
                 return new Q630MBluetoothAuxReport(data, DecodeShortcutButtons(data));
             }
 
-            if (data[1] == 0xC0)
+            // On Q630M Bluetooth, 0xC0 packets still carry live hover coordinates.
+            // Treat 0x00 as the true out-of-range state and keep 0xC0 on the pen path.
+            if (data[1] == 0x00)
             {
+                ResetPenState();
                 return new OutOfRangeReport(data);
             }
 
@@ -280,7 +326,7 @@ public struct Q630MBluetoothAuxReport : IAuxReport, IWheelButtonReport
                 return new DeviceReport(data);
             }
 
-            return new TabletReport(data);
+            return StabilizePenReport(new Q630MBluetoothTabletReport(data));
         }
 
         private bool[] DecodeShortcutButtons(byte[] data)
@@ -327,6 +373,77 @@ public struct Q630MBluetoothAuxReport : IAuxReport, IWheelButtonReport
             return data.Length >= 7 &&
                    (data[4] != 0 || data[5] != 0 || data[6] != 0) &&
                    data[2] == 0 && data[3] == 0;
+        }
+
+        private bool LooksLikeBluetoothShortcutPacket(byte[] data)
+        {
+            if (data.Length < 8)
+            {
+                return false;
+            }
+
+            if (data[1] != 0xE0 && !(data[1].IsBitSet(5) && data[1].IsBitSet(6)))
+            {
+                return false;
+            }
+
+            if (LooksLikeLegacyBitfieldPacket(data))
+            {
+                return true;
+            }
+
+            var buttons = DecodeShortcutButtons(data);
+            return Array.Exists(buttons, static pressed => pressed);
+        }
+
+        private Q630MBluetoothTabletReport StabilizePenReport(Q630MBluetoothTabletReport report)
+        {
+            bool anyButtonsPressed = Array.Exists(report.PenButtons, static pressed => pressed);
+            if (!anyButtonsPressed && Array.Exists(_previousPenButtons, static pressed => pressed))
+            {
+                _consecutiveClearButtonPackets++;
+                if (_consecutiveClearButtonPackets == 1)
+                {
+                    report.PenButtons = (bool[])_previousPenButtons.Clone();
+                }
+                else
+                {
+                    _previousPenButtons = [false, false];
+                }
+            }
+            else
+            {
+                _consecutiveClearButtonPackets = 0;
+                _previousPenButtons = (bool[])report.PenButtons.Clone();
+            }
+
+            if (report.Pressure == 0 && _previousPressure > 0)
+            {
+                _consecutiveZeroPressurePackets++;
+                if (_consecutiveZeroPressurePackets == 1)
+                {
+                    report.Pressure = _previousPressure;
+                }
+                else
+                {
+                    _previousPressure = 0;
+                }
+            }
+            else
+            {
+                _consecutiveZeroPressurePackets = 0;
+                _previousPressure = report.Pressure;
+            }
+
+            return report;
+        }
+
+        private void ResetPenState()
+        {
+            _previousPenButtons = [false, false];
+            _previousPressure = 0;
+            _consecutiveClearButtonPackets = 0;
+            _consecutiveZeroPressurePackets = 0;
         }
     }
 public struct Q630MBluetoothSharedDialReport : IRelativeWheelReport, IWheelButtonReport

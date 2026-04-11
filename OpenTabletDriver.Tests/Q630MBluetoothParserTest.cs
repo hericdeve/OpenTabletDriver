@@ -1,4 +1,5 @@
 using OpenTabletDriver.Configurations.Parsers.Huion;
+using OpenTabletDriver.Plugin.Tablet;
 using Xunit;
 
 namespace OpenTabletDriver.Tests
@@ -78,6 +79,116 @@ namespace OpenTabletDriver.Tests
             {
                 Assert.Equal(i == expectedSlot, report.AuxButtons[i]);
             }
+        }
+
+        [Fact]
+        public void PenParser_DoesNotMisclassifyRegularPenPacketWithInRangeBits()
+        {
+            var parser = new Q630MBluetoothPenReportParser();
+
+            var report = parser.Parse([0x02, 0xE0, 0x34, 0x12, 0x78, 0x56, 0x20, 0x03]);
+
+            var tabletReport = Assert.IsType<Q630MBluetoothTabletReport>(report);
+            Assert.Equal(0x1234u, tabletReport.Position.X);
+            Assert.Equal(0x5678u, tabletReport.Position.Y);
+            Assert.Equal(0x0320u, tabletReport.Pressure);
+        }
+
+        [Fact]
+        public void PenParser_PreservesSecondBarrelButtonHoldOnPenPackets()
+        {
+            var parser = new Q630MBluetoothPenReportParser();
+
+            var report = Assert.IsType<Q630MBluetoothTabletReport>(
+                parser.Parse([0x02, 0xE4, 0x34, 0x12, 0x78, 0x56, 0x00, 0x00]));
+
+            Assert.False(report.PenButtons[0]);
+            Assert.True(report.PenButtons[1]);
+        }
+
+        [Fact]
+        public void PenParser_PreservesTipStateOnPenPackets()
+        {
+            var parser = new Q630MBluetoothPenReportParser();
+
+            var report = Assert.IsType<Q630MBluetoothTabletReport>(
+                parser.Parse([0x02, 0xE2, 0x34, 0x12, 0x78, 0x56, 0x10, 0x00]));
+
+            Assert.True(report.PenButtons[0]);
+        }
+
+        [Fact]
+        public void PenParser_TreatsC0StatusAsHoverInRange()
+        {
+            var parser = new Q630MBluetoothPenReportParser();
+
+            var report = Assert.IsType<Q630MBluetoothTabletReport>(
+                parser.Parse([0x02, 0xC0, 0x34, 0x12, 0x78, 0x56, 0x00, 0x00]));
+
+            Assert.Equal(0x1234u, report.Position.X);
+            Assert.Equal(0x5678u, report.Position.Y);
+            Assert.Equal(0u, report.Pressure);
+            Assert.False(report.PenButtons[0]);
+            Assert.False(report.PenButtons[1]);
+        }
+
+        [Fact]
+        public void PenParser_TreatsZeroStatusAsOutOfRange()
+        {
+            var parser = new Q630MBluetoothPenReportParser();
+
+            var report = parser.Parse([0x02, 0x00, 0x34, 0x12, 0x78, 0x56, 0x00, 0x00]);
+
+            Assert.IsType<OutOfRangeReport>(report);
+        }
+
+        [Theory]
+        [InlineData(0xC3, true, false)]
+        [InlineData(0xC4, false, true)]
+        [InlineData(0xC5, false, true)]
+        public void PenParser_MapsRealBluetoothStatusBits(byte status, bool expectedButton1, bool expectedButton2)
+        {
+            var parser = new Q630MBluetoothPenReportParser();
+
+            var report = Assert.IsType<Q630MBluetoothTabletReport>(
+                parser.Parse([0x02, status, 0x34, 0x12, 0x78, 0x56, 0x20, 0x03]));
+
+            Assert.Equal(expectedButton1, report.PenButtons[0]);
+            Assert.Equal(expectedButton2, report.PenButtons[1]);
+        }
+
+        [Fact]
+        public void PenParser_SuppressesSinglePacketBarrelButton2Drop()
+        {
+            var parser = new Q630MBluetoothPenReportParser();
+
+            var pressed = Assert.IsType<Q630MBluetoothTabletReport>(
+                parser.Parse([0x02, 0xE4, 0x34, 0x12, 0x78, 0x56, 0x20, 0x03]));
+            var preserved = Assert.IsType<Q630MBluetoothTabletReport>(
+                parser.Parse([0x02, 0xE0, 0x34, 0x12, 0x78, 0x56, 0x20, 0x03]));
+            var released = Assert.IsType<Q630MBluetoothTabletReport>(
+                parser.Parse([0x02, 0xE0, 0x34, 0x12, 0x78, 0x56, 0x20, 0x03]));
+
+            Assert.True(pressed.PenButtons[1]);
+            Assert.True(preserved.PenButtons[1]);
+            Assert.False(released.PenButtons[1]);
+        }
+
+        [Fact]
+        public void PenParser_SuppressesSinglePacketPressureDrop()
+        {
+            var parser = new Q630MBluetoothPenReportParser();
+
+            var touching = Assert.IsType<Q630MBluetoothTabletReport>(
+                parser.Parse([0x02, 0xE2, 0x34, 0x12, 0x78, 0x56, 0x10, 0x00]));
+            var preserved = Assert.IsType<Q630MBluetoothTabletReport>(
+                parser.Parse([0x02, 0xE2, 0x34, 0x12, 0x78, 0x56, 0x00, 0x00]));
+            var dropped = Assert.IsType<Q630MBluetoothTabletReport>(
+                parser.Parse([0x02, 0xE2, 0x34, 0x12, 0x78, 0x56, 0x00, 0x00]));
+
+            Assert.Equal(16u, touching.Pressure);
+            Assert.Equal(16u, preserved.Pressure);
+            Assert.Equal(0u, dropped.Pressure);
         }
 
         [Fact]
