@@ -265,14 +265,17 @@ namespace OpenTabletDriver.UX.Windows.Tablet
                 Text = "Raw Data Mode",
             };
 
+            RadioMenuItem? rootRadioButton = null;
             foreach (var decodingMode in Enum.GetValues<DecodingMode>())
             {
                 string modeName = decodingMode.ToString();
 
-                var item = new CheckMenuItem();
+                var item = new RadioMenuItem(rootRadioButton);
                 item.Text = modeName;
                 item.BindDataContext(x => x.Checked,
                     Binding.Property((TDVM vm) => vm.DecodingMode).ToBool(decodingMode));
+
+                rootRadioButton ??= item;
 
                 decodingSwitchMenuItem.Items.Add(item);
             }

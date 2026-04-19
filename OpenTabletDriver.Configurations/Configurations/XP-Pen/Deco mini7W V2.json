@@ -1,32 +1,25 @@
 {
-  "Name": "XP-Pen Deco Pro Small",
+  "Name": "XP-Pen Deco mini7W V2",
   "Specifications": {
     "Digitizer": {
-      "Width": 230.12,
-      "Height": 129.54,
-      "MaxX": 46024,
-      "MaxY": 25908
+      "Width": 177.975,
+      "Height": 111.095,
+      "MaxX": 35595,
+      "MaxY": 22219
     },
     "Pen": {
-      "MaxPressure": 8191,
+      "MaxPressure": 16383,
       "ButtonCount": 2
     },
     "AuxiliaryButtons": {
       "ButtonCount": 8
-    },
-    "Wheels": [
-      {
-        "RelativeWheelSteps": 24,
-        "ButtonCount": 0
-      }
-    ]
+    }
   },
   "DigitizerIdentifiers": [
     {
       "VendorID": 10429,
-      "ProductID": 2313,
-      "InputReportLength": 10,
-      "OutputReportLength": 10,
+      "ProductID": 2377,
+      "InputReportLength": 12,
       "ReportParser": "OpenTabletDriver.Configurations.Parsers.XP_Pen.XP_PenReportParser",
       "OutputInitReport": [
         "ArAE"
