@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using OpenTabletDriver.Desktop;
 using OpenTabletDriver.Desktop.Interop.AppProfiler;
+using OpenTabletDriver.Desktop.Profiles;
 using OpenTabletDriver.Plugin;
 
 #nullable enable
@@ -80,11 +81,7 @@ namespace OpenTabletDriver.Daemon
                         Console.WriteLine($"[AppProfiler] Switching to preset '{preset.Name}' for application '{windowClass}'");
 
                         var appliedSettings = preset.Settings.Clone();
-                        appliedSettings.EnableAppProfiler = settings.EnableAppProfiler;
-                        appliedSettings.AppProfiles = settings.AppProfiles != null
-                            ? new Dictionary<string, string>(settings.AppProfiles)
-                            : new Dictionary<string, string>();
-                        appliedSettings.DefaultAppProfile = settings.DefaultAppProfile;
+                        PreserveRuntimeSettings(appliedSettings, settings);
 
                         _ = _daemon.SetSettings(appliedSettings);
                         _currentPreset = presetName;
@@ -105,15 +102,32 @@ namespace OpenTabletDriver.Daemon
                     Console.WriteLine($"[AppProfiler] Reverting to default preset '{preset.Name}' for application '{windowClass}'");
 
                     var appliedSettings = preset.Settings.Clone();
-                    appliedSettings.EnableAppProfiler = settings.EnableAppProfiler;
-                    appliedSettings.AppProfiles = settings.AppProfiles != null
-                        ? new Dictionary<string, string>(settings.AppProfiles)
-                        : new Dictionary<string, string>();
-                    appliedSettings.DefaultAppProfile = settings.DefaultAppProfile;
+                    PreserveRuntimeSettings(appliedSettings, settings);
 
                     _ = _daemon.SetSettings(appliedSettings);
                     _currentPreset = settings.DefaultAppProfile;
                 }
+            }
+        }
+
+        private static void PreserveRuntimeSettings(Settings appliedSettings, Settings currentSettings)
+        {
+            appliedSettings.EnableAppProfiler = currentSettings.EnableAppProfiler;
+            appliedSettings.AppProfiles = currentSettings.AppProfiles != null
+                ? new Dictionary<string, string>(currentSettings.AppProfiles)
+                : new Dictionary<string, string>();
+            appliedSettings.DefaultAppProfile = currentSettings.DefaultAppProfile;
+
+            foreach (var currentProfile in currentSettings.Profiles)
+            {
+                var appliedProfile = appliedSettings.Profiles.GetProfile(currentProfile.Tablet);
+                if (appliedProfile == null)
+                    continue;
+
+                appliedProfile.AbsoluteModeSettings.Display = new AreaSettings
+                {
+                    Area = currentProfile.AbsoluteModeSettings.Display.Area
+                };
             }
         }
 

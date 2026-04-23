@@ -109,9 +109,25 @@ namespace OpenTabletDriver.Console
             {
                 foreach (var propertyName in IgnoredPresetComparisonProperties)
                     obj.Remove(propertyName);
+
+                RemoveRuntimeDisplayAreas(obj);
             }
 
             return normalized;
+        }
+
+        private static void RemoveRuntimeDisplayAreas(JObject settings)
+        {
+            if (settings[nameof(Settings.Profiles)] is not JArray profiles)
+                return;
+
+            foreach (var profile in profiles.OfType<JObject>())
+            {
+                if (profile[nameof(global::OpenTabletDriver.Desktop.Profiles.Profile.AbsoluteModeSettings)] is not JObject absoluteModeSettings)
+                    continue;
+
+                absoluteModeSettings.Remove(nameof(global::OpenTabletDriver.Desktop.Profiles.AbsoluteModeSettings.Display));
+            }
         }
 
         private static string SerializeSettings(Settings settings)
