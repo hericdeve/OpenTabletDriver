@@ -66,7 +66,9 @@ namespace OpenTabletDriver.Console
             if (!await EnsureDaemonReady()) return;
             GetAndRefreshPresetDirectory();
 
-            var preset = AppInfo.PresetManager.FindPreset(name);
+            if (!TryFindPreset(name, out var preset))
+                return;
+
             var settingsToApply = preset.Settings.Clone();
             settingsToApply.EnableAppProfiler = false;
             await ApplySettings(settingsToApply);
@@ -80,14 +82,24 @@ namespace OpenTabletDriver.Console
             var currentSettings = await Driver.Instance.GetSettings();
             var normalizedCurrent = NormalizePresetComparableSettings(currentSettings);
 
-            foreach (var preset in AppInfo.PresetManager.GetPresets())
+            var matchingPresets = AppInfo.PresetManager.GetPresets()
+                .Where(preset => JToken.DeepEquals(normalizedCurrent, NormalizePresetComparableSettings(preset.Settings)))
+                .OrderBy(preset => preset.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(preset => preset.Name, StringComparer.Ordinal)
+                .ToArray();
+
+            if (matchingPresets.Length > 0)
             {
-                var normalizedPreset = NormalizePresetComparableSettings(preset.Settings);
-                if (JToken.DeepEquals(normalizedCurrent, normalizedPreset))
+                if (matchingPresets.Length > 1)
                 {
-                    System.Console.WriteLine(preset.Name);
-                    return;
+                    Error.WriteLine(
+                        "Warning: multiple presets have the same relevant settings: " +
+                        $"{string.Join(", ", matchingPresets.Select(p => p.Name))}. " +
+                        $"Using '{matchingPresets[0].Name}'.");
                 }
+
+                System.Console.WriteLine(matchingPresets[0].Name);
+                return;
             }
 
             System.Console.WriteLine("Custom");
@@ -164,15 +176,19 @@ namespace OpenTabletDriver.Console
         private static async Task SetAppRule(string windowClass, string presetName)
         {
             if (!await EnsureDaemonReady()) return;
+            GetAndRefreshPresetDirectory();
+            if (!TryFindPreset(presetName, out var preset))
+                return;
+
             var settings = await GetSettings();
 
             settings.AppProfiles ??= new System.Collections.Generic.Dictionary<string, string>();
-            settings.AppProfiles[windowClass] = presetName;
+            settings.AppProfiles[windowClass] = preset.Name;
 
             await Driver.Instance.SetSettings(settings);
             settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
 
-            System.Console.WriteLine($"Mapped window class '{windowClass}' to preset '{presetName}'.");
+            System.Console.WriteLine($"Mapped window class '{windowClass}' to preset '{preset.Name}'.");
         }
 
         private static async Task RemoveAppRule(string windowClass)
@@ -195,14 +211,18 @@ namespace OpenTabletDriver.Console
         private static async Task SetDefaultAppRule(string presetName)
         {
             if (!await EnsureDaemonReady()) return;
+            GetAndRefreshPresetDirectory();
+            if (!TryFindPreset(presetName, out var preset))
+                return;
+
             var settings = await GetSettings();
 
-            settings.DefaultAppProfile = presetName;
+            settings.DefaultAppProfile = preset.Name;
 
             await Driver.Instance.SetSettings(settings);
             settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
 
-            System.Console.WriteLine($"Set default app profile to '{presetName}'.");
+            System.Console.WriteLine($"Set default app profile to '{preset.Name}'.");
         }
 
         private static async Task SetEnableAppProfiler(bool enable)
@@ -230,6 +250,34 @@ namespace OpenTabletDriver.Console
             AppInfo.PresetManager.Refresh();
 
             return presetDir;
+        }
+
+        private static bool TryFindPreset(string presetName, out Preset preset)
+        {
+            preset = AppInfo.PresetManager.FindPreset(presetName) ??
+                     AppInfo.PresetManager.GetPresets()
+                         .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+                         .ThenBy(p => p.Name, StringComparer.Ordinal)
+                         .FirstOrDefault(p => string.Equals(p.Name, presetName, StringComparison.OrdinalIgnoreCase));
+
+            if (preset != null)
+                return true;
+
+            Environment.ExitCode = 1;
+            Error.WriteLine($"Preset '{presetName}' was not found.");
+
+            var presets = AppInfo.PresetManager.GetPresets()
+                .Select(p => p.Name)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+
+            if (presets.Length > 0)
+                Error.WriteLine($"Available presets: {string.Join(", ", presets)}");
+            else
+                Error.WriteLine($"No presets were found in '{AppInfo.Current.PresetDirectory}'.");
+
+            return false;
         }
 
         #endregion
