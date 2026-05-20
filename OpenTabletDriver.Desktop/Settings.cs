@@ -1,5 +1,5 @@
 using System;
-using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Reflection;
 using Newtonsoft.Json;
@@ -88,7 +88,8 @@ namespace OpenTabletDriver.Desktop
 
         private static ProfileCollection GetDefaultProfiles()
         {
-            return new ProfileCollection(AppInfo.PluginManager.GetService<IDriver>().Tablets);
+            // nullable warning suppressed because IDriver should always be provided by DI
+            return new ProfileCollection(AppInfo.PluginManager.GetService<IDriver>()!.Tablets);
         }
 
         #region Custom Serialization
@@ -98,7 +99,7 @@ namespace OpenTabletDriver.Desktop
             Formatting = Formatting.Indented
         };
 
-        public static bool TryDeserialize(FileInfo file, out Settings settings)
+        public static bool TryDeserialize(FileInfo file, [NotNullWhen(true)] out Settings? settings)
         {
             try
             {
@@ -112,7 +113,7 @@ namespace OpenTabletDriver.Desktop
                 return false;
             }
 
-            static Settings deserialize(FileInfo file)
+            static Settings? deserialize(FileInfo file)
             {
                 using (var stream = file.OpenRead())
                 using (var sr = new StreamReader(stream))
@@ -123,41 +124,8 @@ namespace OpenTabletDriver.Desktop
 
         public static string GetVersion()
         {
-            return Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        }
-
-        [Obsolete("Unused and deprecated")]
-        public static void Recover(FileInfo file, Settings settings)
-        {
-            using (var stream = file.OpenRead())
-            using (var sr = new StreamReader(stream))
-            using (var jr = new JsonTextReader(sr))
-            {
-                void propertyWatch(object _, PropertyChangedEventArgs p)
-                {
-                    var prop = settings.GetType().GetProperty(p.PropertyName).GetValue(settings);
-                    Log.Write("Settings", $"Recovered '{p.PropertyName}'", LogLevel.Debug);
-                }
-                settings.PropertyChanged += propertyWatch;
-
-                var serializer = new JsonSerializer
-                {
-                    Formatting = Formatting.Indented
-                };
-
-                try
-                {
-                    serializer.Populate(jr, settings);
-                }
-                catch (JsonException e)
-                {
-                    Log.Write("Settings", $"Recovery ended. Reason: {e.Message}", LogLevel.Debug);
-                }
-                finally
-                {
-                    settings.PropertyChanged -= propertyWatch;
-                }
-            }
+            // null warning suppressed because this should always succeed in desktop releases
+            return Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion!;
         }
 
         public void Serialize(FileInfo file)
