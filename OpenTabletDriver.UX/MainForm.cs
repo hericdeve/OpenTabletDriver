@@ -33,12 +33,10 @@ namespace OpenTabletDriver.UX
             InitializePlatform();
 
             SetTitle();
-            Menu = ConstructLimitedMenu();
+            base.Menu = ConstructLimitedMenu();
+            fullMenu = ConstructMenu();
 
-            base.Content = placeholder = new Placeholder
-            {
-                Text = "Connecting to OpenTabletDriver Daemon..."
-            };
+            base.Content = placeholder;
 
             trayIcon?.Indicator?.Show();
 
