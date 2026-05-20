@@ -120,9 +120,13 @@ namespace OpenTabletDriver.UX
         private const int DEFAULT_CLIENT_WIDTH = 960;
         private const int DEFAULT_CLIENT_HEIGHT = 760;
 
-        private MenuBar menu;
-        private Placeholder placeholder;
-        private TrayIcon trayIcon;
+        private readonly MenuBar fullMenu;
+        private readonly Placeholder placeholder = new()
+        {
+            Text = "Connecting to OpenTabletDriver Daemon...",
+        };
+
+                private TrayIcon trayIcon;
         private int _isConnectingToDaemon;
 
         public bool SilenceDaemonShutdown { get; set; }
@@ -471,7 +475,7 @@ namespace OpenTabletDriver.UX
                 await SyncSettings();
 
                 // Set window content
-                base.Menu = menu ??= ConstructMenu();
+                this.Menu = fullMenu;
                 base.Content = new TabletSwitcherPanel
                 {
                     CommandsControl = new StackLayout
@@ -732,7 +736,7 @@ namespace OpenTabletDriver.UX
 
             // Update File submenu
             var presets = AppInfo.PresetManager.GetPresets();
-            var presetsMenu = menu.Items.GetSubmenu("&File").Items.GetSubmenu("Presets") as ButtonMenuItem;
+            var presetsMenu = fullMenu.Items.GetSubmenu("&File").Items.GetSubmenu("Presets") as ButtonMenuItem;
             presetsMenu.Items.Clear();
 
             if (presets.Count != 0)
@@ -896,8 +900,7 @@ namespace OpenTabletDriver.UX
         {
             try
             {
-                var log = await App.Driver.Instance.GetCurrentLog();
-                var diagnosticDump = new DiagnosticInfo(log, await App.Driver.Instance.GetDevices());
+                var diagnosticDump = await App.Driver.Instance.GetDiagnosticInfo();
 
                 Clipboard.Instance.Clear();
                 Clipboard.Instance.Text = diagnosticDump.ToString();

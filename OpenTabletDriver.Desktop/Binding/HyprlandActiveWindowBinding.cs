@@ -77,7 +77,7 @@ namespace OpenTabletDriver.Desktop.Binding
                     }
 
                     var windowArea = GetActiveWindowArea();
-                    if (windowArea != null && TryGetDisplayAreaForWindow(windowArea, VirtualScreen, out var displayArea))
+                    if (windowArea != null && GetMonitorAreaSettings(windowArea.MonitorId) is AreaSettings displayArea)
                     {
                         profile.AbsoluteModeSettings.Display = displayArea;
                     }
@@ -171,38 +171,82 @@ namespace OpenTabletDriver.Desktop.Binding
             return null;
         }
 
-        private static bool TryGetDisplayAreaForWindow(WindowArea windowArea, IVirtualScreen virtualScreen, out AreaSettings area)
+        private static AreaSettings? GetMonitorAreaSettings(int monitorId)
         {
-            var displays = virtualScreen.Displays.Where(d => d is not IVirtualScreen).ToArray();
-            if (displays.Length == 0)
+            var monitors = GetHyprlandMonitors();
+            var target = monitors.FirstOrDefault(m => m.MonitorId == monitorId);
+            if (target != null)
             {
-                area = AreaSettings.GetDefaults(virtualScreen);
-                return true;
+                // Hyprland 'width' in json is physical width. Logical width = width / scale.
+                // But wait! Hyprland 'monitor.transform' or 'monitor.scale' might be needed.
+                // To be safe, we calculate width/height logically if we can, or just use what we used in the Cycle Binding.
+                // In HyprlandMonitorCycleBinding, the scaling isn't applied either, it uses 'width' from json.
+                // If the user's issue was just about wrong monitors entirely, this will fix it.
+                return new AreaSettings
+                {
+                    Width = target.Width,
+                    Height = target.Height,
+                    X = target.X + target.Width / 2,
+                    Y = target.Y + target.Height / 2,
+                    Rotation = 0
+                };
             }
+            return null;
+        }
 
-            var centerX = windowArea.X + windowArea.Width / 2;
-            var centerY = windowArea.Y + windowArea.Height / 2;
-
-            var display = displays.FirstOrDefault(d =>
-                centerX >= d.Position.X && centerX < d.Position.X + d.Width &&
-                centerY >= d.Position.Y && centerY < d.Position.Y + d.Height);
-
-            if (display == null)
-                display = displays[0];
-
-            var xOffset = displays.Min(d => d.Position.X);
-            var yOffset = displays.Min(d => d.Position.Y);
-
-            area = new AreaSettings
+        private static WindowArea[] GetHyprlandMonitors()
+        {
+            try
             {
-                Width = display.Width,
-                Height = display.Height,
-                X = display.Position.X - xOffset + virtualScreen.Position.X + (display.Width / 2),
-                Y = display.Position.Y - yOffset + virtualScreen.Position.Y + (display.Height / 2),
-                Rotation = 0
-            };
+                using var process = new Process();
+                process.StartInfo = new ProcessStartInfo("hyprctl")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                };
+                process.StartInfo.ArgumentList.Add("monitors");
+                process.StartInfo.ArgumentList.Add("-j");
 
-            return true;
+                process.Start();
+                var output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit(1000);
+
+                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                {
+                    var monitors = JArray.Parse(output);
+                    return monitors
+                        .Where(m => !(m.Value<bool?>("disabled") ?? false))
+                        .Select(m => {
+                            var width = m.Value<float?>("width") ?? 0;
+                            var height = m.Value<float?>("height") ?? 0;
+                            var scale = m.Value<float?>("scale") ?? 1.0f;
+                            if (scale <= 0) scale = 1.0f;
+                            var transform = m.Value<int?>("transform") ?? 0;
+                            
+                            // If rotated, swap physical width/height
+                            var isRotated = transform % 2 != 0;
+                            var actualWidth = isRotated ? height : width;
+                            var actualHeight = isRotated ? width : height;
+
+                            // Scale to logical coordinates
+                            var logicalWidth = actualWidth / scale;
+                            var logicalHeight = actualHeight / scale;
+
+                            return new WindowArea(
+                                m.Value<float?>("x") ?? 0,
+                                m.Value<float?>("y") ?? 0,
+                                logicalWidth,
+                                logicalHeight,
+                                m.Value<int?>("id") ?? -1
+                            );
+                        })
+                        .Where(m => m.Width > 0 && m.Height > 0)
+                        .ToArray();
+                }
+            }
+            catch {}
+            return [];
         }
 
         public override string ToString() => PLUGIN_NAME;
