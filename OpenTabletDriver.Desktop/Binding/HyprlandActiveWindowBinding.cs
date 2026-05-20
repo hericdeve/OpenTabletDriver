@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using OpenTabletDriver.Desktop.Contracts;
 using OpenTabletDriver.Desktop.Profiles;
@@ -36,9 +37,9 @@ namespace OpenTabletDriver.Desktop.Binding
 
             try
             {
-                if (Daemon == null || VirtualScreen == null)
+                if (Daemon == null)
                 {
-                    Log.Write(PLUGIN_NAME, "Unable to perform mapping because the daemon or virtual screen is unavailable.", LogLevel.Error);
+                    Log.Write(PLUGIN_NAME, "Unable to perform mapping because the daemon is unavailable.", LogLevel.Error);
                     return;
                 }
 
@@ -63,15 +64,28 @@ namespace OpenTabletDriver.Desktop.Binding
                         Y = windowArea.Y + windowArea.Height / 2,
                         Rotation = 0 // Standard rotation for windows
                     };
-                    
+
                     _mappedToWindow = true;
                     Log.Write(PLUGIN_NAME, $"Mapped '{tablet.Properties.Name}' to active window.");
                 }
                 else
                 {
-                    // Map back to full virtual screen
-                    profile.AbsoluteModeSettings.Display = AreaSettings.GetDefaults(VirtualScreen);
-                    
+                    if (VirtualScreen == null)
+                    {
+                        Log.Write(PLUGIN_NAME, "Unable to restore full screen mapping because the virtual screen is unavailable.", LogLevel.Warning);
+                        return;
+                    }
+
+                    var windowArea = GetActiveWindowArea();
+                    if (windowArea != null && TryGetDisplayAreaForWindow(windowArea, VirtualScreen, out var displayArea))
+                    {
+                        profile.AbsoluteModeSettings.Display = displayArea;
+                    }
+                    else
+                    {
+                        profile.AbsoluteModeSettings.Display = AreaSettings.GetDefaults(VirtualScreen);
+                    }
+
                     _mappedToWindow = false;
                     Log.Write(PLUGIN_NAME, $"Mapped '{tablet.Properties.Name}' back to full screen.");
                 }
@@ -155,6 +169,40 @@ namespace OpenTabletDriver.Desktop.Binding
             {
             }
             return null;
+        }
+
+        private static bool TryGetDisplayAreaForWindow(WindowArea windowArea, IVirtualScreen virtualScreen, out AreaSettings area)
+        {
+            var displays = virtualScreen.Displays.Where(d => d is not IVirtualScreen).ToArray();
+            if (displays.Length == 0)
+            {
+                area = AreaSettings.GetDefaults(virtualScreen);
+                return true;
+            }
+
+            var centerX = windowArea.X + windowArea.Width / 2;
+            var centerY = windowArea.Y + windowArea.Height / 2;
+
+            var display = displays.FirstOrDefault(d =>
+                centerX >= d.Position.X && centerX < d.Position.X + d.Width &&
+                centerY >= d.Position.Y && centerY < d.Position.Y + d.Height);
+
+            if (display == null)
+                display = displays[0];
+
+            var xOffset = displays.Min(d => d.Position.X);
+            var yOffset = displays.Min(d => d.Position.Y);
+
+            area = new AreaSettings
+            {
+                Width = display.Width,
+                Height = display.Height,
+                X = display.Position.X - xOffset + virtualScreen.Position.X + (display.Width / 2),
+                Y = display.Position.Y - yOffset + virtualScreen.Position.Y + (display.Height / 2),
+                Rotation = 0
+            };
+
+            return true;
         }
 
         public override string ToString() => PLUGIN_NAME;
