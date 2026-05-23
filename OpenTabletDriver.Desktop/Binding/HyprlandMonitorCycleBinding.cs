@@ -160,13 +160,27 @@ namespace OpenTabletDriver.Desktop.Binding
             var monitors = JArray.Parse(output);
             return monitors
                 .Where(m => !(m.Value<bool?>("disabled") ?? false))
-                .Select((m, i) => new MonitorArea(
-                    m.Value<string>("name") ?? $"Monitor {i + 1}",
-                    m.Value<float?>("x") ?? 0,
-                    m.Value<float?>("y") ?? 0,
-                    m.Value<float?>("width") ?? 0,
-                    m.Value<float?>("height") ?? 0,
-                    i + 1))
+                .Select((m, i) =>
+                {
+                    var width = m.Value<float?>("width") ?? 0;
+                    var height = m.Value<float?>("height") ?? 0;
+                    var scale = m.Value<float?>("scale") ?? 1.0f;
+                    if (scale <= 0) scale = 1.0f;
+                    var transform = m.Value<int?>("transform") ?? 0;
+
+                    // If rotated, swap physical width/height
+                    var isRotated = transform % 2 != 0;
+                    var actualWidth = isRotated ? height : width;
+                    var actualHeight = isRotated ? width : height;
+
+                    return new MonitorArea(
+                        m.Value<string>("name") ?? $"Monitor {i + 1}",
+                        m.Value<float?>("x") ?? 0,
+                        m.Value<float?>("y") ?? 0,
+                        actualWidth / scale,
+                        actualHeight / scale,
+                        i + 1);
+                })
                 .Where(m => m.Width > 0 && m.Height > 0)
                 .OrderBy(m => m.Index)
                 .ToArray();
