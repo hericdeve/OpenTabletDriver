@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using OpenTabletDriver.Plugin;
 
 #nullable enable
@@ -16,6 +17,7 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
         private Task? _readTask;
 
         public event EventHandler<ActiveWindowChangedEventArgs>? ActiveWindowChanged;
+        public event EventHandler? MonitorsChanged;
 
         public bool IsSupported => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE"));
 
@@ -91,6 +93,10 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
 
                             ActiveWindowChanged?.Invoke(this, new ActiveWindowChangedEventArgs(windowClass, windowTitle));
                         }
+                        else if (line.StartsWith("monitoradded>>") || line.StartsWith("monitorremoved>>"))
+                        {
+                            MonitorsChanged?.Invoke(this, EventArgs.Empty);
+                        }
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -106,6 +112,138 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
                     }
                 }
             }
+        }
+
+        public static OpenTabletDriver.Desktop.Profiles.AreaSettings? GetVirtualScreenArea()
+        {
+            try
+            {
+                using var process = new Process();
+                process.StartInfo = new ProcessStartInfo("hyprctl")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                };
+                process.StartInfo.ArgumentList.Add("monitors");
+                process.StartInfo.ArgumentList.Add("-j");
+
+                process.Start();
+                var output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit(1000);
+
+                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                {
+                    var monitors = Newtonsoft.Json.Linq.JArray.Parse(output);
+                    
+                    float minX = float.MaxValue;
+                    float minY = float.MaxValue;
+                    float maxX = float.MinValue;
+                    float maxY = float.MinValue;
+                    bool found = false;
+
+                    foreach (var m in monitors)
+                    {
+                        if (m.Value<bool?>("disabled") == true)
+                            continue;
+
+                        var x = m.Value<float?>("x") ?? 0;
+                        var y = m.Value<float?>("y") ?? 0;
+                        var width = m.Value<float?>("width") ?? 0;
+                        var height = m.Value<float?>("height") ?? 0;
+                        var scale = m.Value<float?>("scale") ?? 1.0f;
+                        if (scale <= 0) scale = 1.0f;
+                        var transform = m.Value<int?>("transform") ?? 0;
+
+                        var isRotated = transform % 2 != 0;
+                        var actualWidth = isRotated ? height : width;
+                        var actualHeight = isRotated ? width : height;
+
+                        var logicalWidth = actualWidth / scale;
+                        var logicalHeight = actualHeight / scale;
+
+                        minX = Math.Min(minX, x);
+                        minY = Math.Min(minY, y);
+                        maxX = Math.Max(maxX, x + logicalWidth);
+                        maxY = Math.Max(maxY, y + logicalHeight);
+                        found = true;
+                    }
+
+                    if (found)
+                    {
+                        var totalWidth = maxX - minX;
+                        var totalHeight = maxY - minY;
+                        return new OpenTabletDriver.Desktop.Profiles.AreaSettings
+                        {
+                            Width = totalWidth,
+                            Height = totalHeight,
+                            X = minX + totalWidth / 2,
+                            Y = minY + totalHeight / 2,
+                            Rotation = 0
+                        };
+                    }
+                }
+            }
+            catch {}
+            return null;
+        }
+
+        public static System.Collections.Generic.List<OpenTabletDriver.Desktop.Profiles.AreaSettings> GetMonitors()
+        {
+            var result = new System.Collections.Generic.List<OpenTabletDriver.Desktop.Profiles.AreaSettings>();
+            try
+            {
+                using var process = new Process();
+                process.StartInfo = new ProcessStartInfo("hyprctl")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                };
+                process.StartInfo.ArgumentList.Add("monitors");
+                process.StartInfo.ArgumentList.Add("-j");
+
+                process.Start();
+                var output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit(1000);
+
+                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                {
+                    var monitors = Newtonsoft.Json.Linq.JArray.Parse(output);
+                    
+                    foreach (var m in monitors)
+                    {
+                        if (m.Value<bool?>("disabled") == true)
+                            continue;
+
+                        var x = m.Value<float?>("x") ?? 0;
+                        var y = m.Value<float?>("y") ?? 0;
+                        var width = m.Value<float?>("width") ?? 0;
+                        var height = m.Value<float?>("height") ?? 0;
+                        var scale = m.Value<float?>("scale") ?? 1.0f;
+                        if (scale <= 0) scale = 1.0f;
+                        var transform = m.Value<int?>("transform") ?? 0;
+
+                        var isRotated = transform % 2 != 0;
+                        var actualWidth = isRotated ? height : width;
+                        var actualHeight = isRotated ? width : height;
+
+                        var logicalWidth = actualWidth / scale;
+                        var logicalHeight = actualHeight / scale;
+
+                        result.Add(new OpenTabletDriver.Desktop.Profiles.AreaSettings
+                        {
+                            Width = logicalWidth,
+                            Height = logicalHeight,
+                            X = x + logicalWidth / 2,
+                            Y = y + logicalHeight / 2,
+                            Rotation = 0
+                        });
+                    }
+                }
+            }
+            catch {}
+            return result;
         }
     }
 }

@@ -8,6 +8,7 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
         void Start();
         void Stop();
         event EventHandler<ActiveWindowChangedEventArgs> ActiveWindowChanged;
+        event EventHandler? MonitorsChanged;
     }
 
     public class ActiveWindowChangedEventArgs : EventArgs
