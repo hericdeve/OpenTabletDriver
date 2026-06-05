@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -173,12 +174,13 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
                     {
                         var totalWidth = maxX - minX;
                         var totalHeight = maxY - minY;
+                        // Normalize to (0,0) origin matching VirtualScreen/evdev
                         return new OpenTabletDriver.Desktop.Profiles.AreaSettings
                         {
                             Width = totalWidth,
                             Height = totalHeight,
-                            X = minX + totalWidth / 2,
-                            Y = minY + totalHeight / 2,
+                            X = totalWidth / 2,
+                            Y = totalHeight / 2,
                             Rotation = 0
                         };
                     }
@@ -210,7 +212,10 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
                 if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
                 {
                     var monitors = Newtonsoft.Json.Linq.JArray.Parse(output);
-                    
+
+                    // First pass: collect raw monitor data
+                    var rawMonitors = new System.Collections.Generic.List<(float x, float y, float w, float h)>();
+
                     foreach (var m in monitors)
                     {
                         if (m.Value<bool?>("disabled") == true)
@@ -231,12 +236,25 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
                         var logicalWidth = actualWidth / scale;
                         var logicalHeight = actualHeight / scale;
 
+                        rawMonitors.Add((x, y, logicalWidth, logicalHeight));
+                    }
+
+                    // Compute origin offset to normalize to (0,0)
+                    float originX = 0, originY = 0;
+                    if (rawMonitors.Count > 0)
+                    {
+                        originX = rawMonitors.Min(m => m.x);
+                        originY = rawMonitors.Min(m => m.y);
+                    }
+
+                    foreach (var (x, y, w, h) in rawMonitors)
+                    {
                         result.Add(new OpenTabletDriver.Desktop.Profiles.AreaSettings
                         {
-                            Width = logicalWidth,
-                            Height = logicalHeight,
-                            X = x + logicalWidth / 2,
-                            Y = y + logicalHeight / 2,
+                            Width = w,
+                            Height = h,
+                            X = (x - originX) + w / 2,
+                            Y = (y - originY) + h / 2,
                             Rotation = 0
                         });
                     }

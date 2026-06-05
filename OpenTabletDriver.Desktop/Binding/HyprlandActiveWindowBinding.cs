@@ -55,13 +55,18 @@ namespace OpenTabletDriver.Desktop.Binding
                         return;
                     }
 
+                    // Window coordinates from hyprctl are in Hyprland's coordinate
+                    // space which can have negative origins.  Shift them to the
+                    // VirtualScreen/evdev coordinate space (origin at 0,0).
+                    var originOffset = GetHyprlandOriginOffset();
+
                     // Map to window
                     profile.AbsoluteModeSettings.Display = new AreaSettings
                     {
                         Width = windowArea.Width,
                         Height = windowArea.Height,
-                        X = windowArea.X + windowArea.Width / 2,
-                        Y = windowArea.Y + windowArea.Height / 2,
+                        X = windowArea.X - originOffset.x + windowArea.Width / 2,
+                        Y = windowArea.Y - originOffset.y + windowArea.Height / 2,
                         Rotation = 0 // Standard rotation for windows
                     };
 
@@ -215,7 +220,7 @@ namespace OpenTabletDriver.Desktop.Binding
                 if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
                 {
                     var monitors = JArray.Parse(output);
-                    return monitors
+                    var parsed = monitors
                         .Where(m => !(m.Value<bool?>("disabled") ?? false))
                         .Select(m => {
                             var width = m.Value<float?>("width") ?? 0;
@@ -243,10 +248,73 @@ namespace OpenTabletDriver.Desktop.Binding
                         })
                         .Where(m => m.Width > 0 && m.Height > 0)
                         .ToArray();
+
+                    // Normalize Hyprland coordinates to (0,0) origin to match
+                    // the VirtualScreen/evdev coordinate space.
+                    if (parsed.Length > 0)
+                    {
+                        var minX = parsed.Min(m => m.X);
+                        var minY = parsed.Min(m => m.Y);
+                        if (minX != 0 || minY != 0)
+                        {
+                            parsed = parsed
+                                .Select(m => new WindowArea(m.X - minX, m.Y - minY, m.Width, m.Height, m.MonitorId))
+                                .ToArray();
+                        }
+                    }
+
+                    return parsed;
                 }
             }
             catch {}
             return [];
+        }
+
+        /// <summary>
+        /// Returns the minimum (x, y) position across all Hyprland monitors in
+        /// Hyprland's raw coordinate space.  Subtracting these values from any
+        /// Hyprland position normalizes it to the VirtualScreen (0,0) origin.
+        /// </summary>
+        private static (float x, float y) GetHyprlandOriginOffset()
+        {
+            try
+            {
+                using var process = new Process();
+                process.StartInfo = new ProcessStartInfo("hyprctl")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                };
+                process.StartInfo.ArgumentList.Add("monitors");
+                process.StartInfo.ArgumentList.Add("-j");
+
+                process.Start();
+                var output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit(1000);
+
+                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                {
+                    var monitors = JArray.Parse(output);
+                    float minX = float.MaxValue, minY = float.MaxValue;
+                    bool found = false;
+
+                    foreach (var m in monitors)
+                    {
+                        if (m.Value<bool?>("disabled") == true) continue;
+                        var x = m.Value<float?>("x") ?? 0;
+                        var y = m.Value<float?>("y") ?? 0;
+                        if (x < minX) minX = x;
+                        if (y < minY) minY = y;
+                        found = true;
+                    }
+
+                    if (found)
+                        return (minX, minY);
+                }
+            }
+            catch {}
+            return (0, 0);
         }
 
         public override string ToString() => PLUGIN_NAME;

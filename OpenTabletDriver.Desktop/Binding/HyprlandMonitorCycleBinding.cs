@@ -158,7 +158,7 @@ namespace OpenTabletDriver.Desktop.Binding
                 return [];
 
             var monitors = JArray.Parse(output);
-            return monitors
+            var parsed = monitors
                 .Where(m => !(m.Value<bool?>("disabled") ?? false))
                 .Select((m, i) =>
                 {
@@ -184,6 +184,26 @@ namespace OpenTabletDriver.Desktop.Binding
                 .Where(m => m.Width > 0 && m.Height > 0)
                 .OrderBy(m => m.Index)
                 .ToArray();
+
+            // Hyprland reports positions in its own coordinate space which can
+            // include negative values (e.g. laptop at x=-1536 when external
+            // monitor sits at 0,0).  The evdev virtual pointer and VirtualScreen
+            // use a coordinate space that starts at (0,0), so we need to shift
+            // all monitors so the top-left corner of the bounding box is at the
+            // origin.
+            if (parsed.Length > 0)
+            {
+                var minX = parsed.Min(m => m.X);
+                var minY = parsed.Min(m => m.Y);
+                if (minX != 0 || minY != 0)
+                {
+                    parsed = parsed
+                        .Select(m => new MonitorArea(m.Name, m.X - minX, m.Y - minY, m.Width, m.Height, m.Index))
+                        .ToArray();
+                }
+            }
+
+            return parsed;
         }
 
         private MonitorArea[] GetVirtualScreenMonitors()
