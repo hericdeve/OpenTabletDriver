@@ -68,8 +68,15 @@ namespace OpenTabletDriver.Console
             if (!TryFindPreset(name, out var preset))
                 return;
 
+            var currentSettings = await GetSettings();
             var settingsToApply = preset.Settings.Clone();
+
             settingsToApply.EnableAppProfiler = false;
+            settingsToApply.DefaultAppProfile = currentSettings.DefaultAppProfile;
+            settingsToApply.AppProfiles = currentSettings.AppProfiles != null
+                ? new System.Collections.Generic.Dictionary<string, string>(currentSettings.AppProfiles)
+                : new System.Collections.Generic.Dictionary<string, string>();
+
             await ApplySettings(settingsToApply);
         }
 

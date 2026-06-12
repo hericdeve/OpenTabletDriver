@@ -836,14 +836,26 @@ namespace OpenTabletDriver.UX
             }
         }
 
-        public static void PresetButtonHandler(object sender, EventArgs e)
+        public static async void PresetButtonHandler(object sender, EventArgs e)
         {
             var presetName = (sender as ButtonMenuItem).Text;
             var preset = AppInfo.PresetManager.FindPreset(presetName);
-            App.Current.Settings = preset.Settings;
-            App.Current.Settings.EnableAppProfiler = false;
-            App.Driver.Instance.SetSettings(App.Current.Settings);
-            Log.Write("Settings", $"Applied preset '{preset.Name}'");
+
+            if (preset != null && App.Current.Settings is Settings currentSettings)
+            {
+                var settingsToApply = preset.Settings.Clone();
+
+                settingsToApply.EnableAppProfiler = false;
+                settingsToApply.DefaultAppProfile = currentSettings.DefaultAppProfile;
+                settingsToApply.AppProfiles = currentSettings.AppProfiles != null
+                    ? new System.Collections.Generic.Dictionary<string, string>(currentSettings.AppProfiles)
+                    : new System.Collections.Generic.Dictionary<string, string>();
+
+                await App.Driver.Instance.SetSettings(settingsToApply);
+                settingsToApply.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+
+                Log.Write("Settings", $"Applied preset '{preset.Name}'");
+            }
         }
 
         private static async Task DetectTablet()
