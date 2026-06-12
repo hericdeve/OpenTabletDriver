@@ -482,7 +482,12 @@ public struct Q630MBluetoothSharedDialReport : IRelativeWheelReport, IWheelButto
                 return 0;
             }
 
-            return BitConverter.ToInt16(data, 3);
+            // The BT firmware sends an accumulated int16 delta that can be very large
+            // (or even anomalous, e.g. -256) when the pen is also active and BT bandwidth
+            // is constrained. Clamp to ±1 to match the wired KamvasRelWheelReport
+            // behaviour and prevent a single burst packet from firing the binding
+            // hundreds of times.
+            return Math.Sign(BitConverter.ToInt16(data, 3));
         }
 
         private static bool IsWheel1ButtonPressed(byte[] data) => data[2] is 0x02 or 0x03;
