@@ -93,6 +93,18 @@ namespace OpenTabletDriver.Tests.ConfigurationTest
                     return false;
             }
 
+            string? aHidReports = null;
+            string? bHidReports = null;
+            bool aHas = a.Attributes?.TryGetValue("HID_REPORTS", out aHidReports) ?? false;
+            bool bHas = b.Attributes?.TryGetValue("HID_REPORTS", out bHidReports) ?? false;
+            if (aHas || bHas)
+            {
+                aHidReports ??= string.Empty;
+                bHidReports ??= string.Empty;
+                if (aHidReports != bHidReports)
+                    return false;
+            }
+
             if (a.DeviceStrings is null || a.DeviceStrings.Count == 0 || b.DeviceStrings is null || b.DeviceStrings.Count == 0)
             {
                 return true; // One or both have no device strings, so they match.

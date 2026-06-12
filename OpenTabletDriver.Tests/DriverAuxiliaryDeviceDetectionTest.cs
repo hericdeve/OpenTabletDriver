@@ -76,7 +76,11 @@ namespace OpenTabletDriver.Tests
             return new TabletConfiguration
             {
                 Name = "Multi Aux Test Tablet",
-                Specifications = new TabletSpecifications(),
+                Specifications = new TabletSpecifications
+                {
+                    Digitizer = new DigitizerSpecifications(),
+                    Pen = new PenSpecifications()
+                },
                 DigitizerIdentifiers =
                 [
                     CreateIdentifier("digitizer-1")
@@ -94,7 +98,11 @@ namespace OpenTabletDriver.Tests
             return new TabletConfiguration
             {
                 Name = "Overlapping Aux Test Tablet",
-                Specifications = new TabletSpecifications(),
+                Specifications = new TabletSpecifications
+                {
+                    Digitizer = new DigitizerSpecifications(),
+                    Pen = new PenSpecifications()
+                },
                 DigitizerIdentifiers =
                 [
                     CreateIdentifier("shared")
