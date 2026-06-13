@@ -16,10 +16,6 @@ namespace OpenTabletDriver.Desktop
         private PluginSettingStoreCollection tools = new PluginSettingStoreCollection();
         private string revision = GetVersion();
 
-        private bool enableAppProfiler;
-        private string defaultAppProfile;
-        private System.Collections.Generic.Dictionary<string, string> appProfiles = new System.Collections.Generic.Dictionary<string, string>();
-
         [JsonProperty(nameof(Revision))]
         public string Revision
         {
@@ -53,27 +49,6 @@ namespace OpenTabletDriver.Desktop
         {
             set => RaiseAndSetIfChanged(ref this.tools, value);
             get => this.tools;
-        }
-
-        [JsonProperty(nameof(EnableAppProfiler))]
-        public bool EnableAppProfiler
-        {
-            set => this.RaiseAndSetIfChanged(ref this.enableAppProfiler, value);
-            get => this.enableAppProfiler;
-        }
-
-        [JsonProperty(nameof(DefaultAppProfile))]
-        public string DefaultAppProfile
-        {
-            set => this.RaiseAndSetIfChanged(ref this.defaultAppProfile, value);
-            get => this.defaultAppProfile;
-        }
-
-        [JsonProperty(nameof(AppProfiles))]
-        public System.Collections.Generic.Dictionary<string, string> AppProfiles
-        {
-            set => this.RaiseAndSetIfChanged(ref this.appProfiles, value);
-            get => this.appProfiles;
         }
 
         public static Settings GetDefaults()

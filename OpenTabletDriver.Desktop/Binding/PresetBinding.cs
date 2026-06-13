@@ -38,18 +38,6 @@ namespace OpenTabletDriver.Desktop.Binding
                 {
                     var nextSettings = preset.Settings.Clone();
 
-                    try
-                    {
-                        var currentSettings = Daemon.GetSettings().GetAwaiter().GetResult();
-                        nextSettings.EnableAppProfiler = currentSettings.EnableAppProfiler;
-                        nextSettings.DefaultAppProfile = currentSettings.DefaultAppProfile;
-                        nextSettings.AppProfiles = new Dictionary<string, string>(currentSettings.AppProfiles);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Exception(ex, LogLevel.Debug);
-                    }
-
                     Daemon.SetSettings(nextSettings);
                     Daemon.ForceResynchronize();
                     Log.Write("Settings", $"Applied preset '{preset.Name}'.");

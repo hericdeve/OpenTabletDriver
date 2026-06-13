@@ -13,6 +13,7 @@ namespace OpenTabletDriver.Desktop
     {
         private string? configurationDirectory,
             settingsFile,
+            appProfilesFile,
             pluginDirectory,
             presetDirectory,
             logDirectory,
@@ -81,6 +82,13 @@ namespace OpenTabletDriver.Desktop
         }
 
         [AllowNull]
+        public string AppProfilesFile
+        {
+            set => this.appProfilesFile = value;
+            get => this.appProfilesFile ?? GetDefaultAppProfilesFile();
+        }
+
+        [AllowNull]
         public string PluginDirectory
         {
             set => this.pluginDirectory = value;
@@ -138,6 +146,7 @@ namespace OpenTabletDriver.Desktop
         );
 
         private string GetDefaultSettingsFile() => Path.Join(AppDataDirectory, "settings.json");
+        private string GetDefaultAppProfilesFile() => Path.Join(AppDataDirectory, "app-profiles.json");
         private string GetDefaultPluginDirectory() => Path.Join(AppDataDirectory, "Plugins");
         private string GetDefaultPresetDirectory() => Path.Join(AppDataDirectory, "Presets");
         private string GetDefaultLogDirectory() => Path.Join(AppDataDirectory, "Logs");

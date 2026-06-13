@@ -68,14 +68,7 @@ namespace OpenTabletDriver.Console
             if (!TryFindPreset(name, out var preset))
                 return;
 
-            var currentSettings = await GetSettings();
             var settingsToApply = preset.Settings.Clone();
-
-            settingsToApply.EnableAppProfiler = false;
-            settingsToApply.DefaultAppProfile = currentSettings.DefaultAppProfile;
-            settingsToApply.AppProfiles = currentSettings.AppProfiles != null
-                ? new System.Collections.Generic.Dictionary<string, string>(currentSettings.AppProfiles)
-                : new System.Collections.Generic.Dictionary<string, string>();
 
             await ApplySettings(settingsToApply);
         }
@@ -113,10 +106,7 @@ namespace OpenTabletDriver.Console
 
         private static readonly string[] IgnoredPresetComparisonProperties =
         {
-            nameof(Settings.Revision),
-            nameof(Settings.EnableAppProfiler),
-            nameof(Settings.DefaultAppProfile),
-            nameof(Settings.AppProfiles)
+            nameof(Settings.Revision)
         };
 
         private static JToken NormalizePresetComparableSettings(Settings settings)
@@ -186,13 +176,12 @@ namespace OpenTabletDriver.Console
             if (!TryFindPreset(presetName, out var preset))
                 return;
 
-            var settings = await GetSettings();
+            var settings = await Driver.Instance.GetAppProfilerSettings();
 
             settings.AppProfiles ??= new System.Collections.Generic.Dictionary<string, string>();
             settings.AppProfiles[windowClass] = preset.Name;
 
-            await Driver.Instance.SetSettings(settings);
-            settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+            await Driver.Instance.SetAppProfilerSettings(settings);
 
             System.Console.WriteLine($"Mapped window class '{windowClass}' to preset '{preset.Name}'.");
         }
@@ -200,12 +189,11 @@ namespace OpenTabletDriver.Console
         private static async Task RemoveAppRule(string windowClass)
         {
             if (!await EnsureDaemonReady()) return;
-            var settings = await GetSettings();
+            var settings = await Driver.Instance.GetAppProfilerSettings();
 
             if (settings.AppProfiles != null && settings.AppProfiles.Remove(windowClass))
             {
-                await Driver.Instance.SetSettings(settings);
-                settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+                await Driver.Instance.SetAppProfilerSettings(settings);
                 System.Console.WriteLine($"Removed application rule for '{windowClass}'.");
             }
             else
@@ -221,12 +209,11 @@ namespace OpenTabletDriver.Console
             if (!TryFindPreset(presetName, out var preset))
                 return;
 
-            var settings = await GetSettings();
+            var settings = await Driver.Instance.GetAppProfilerSettings();
 
             settings.DefaultAppProfile = preset.Name;
 
-            await Driver.Instance.SetSettings(settings);
-            settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+            await Driver.Instance.SetAppProfilerSettings(settings);
 
             System.Console.WriteLine($"Set default app profile to '{preset.Name}'.");
         }
@@ -234,12 +221,11 @@ namespace OpenTabletDriver.Console
         private static async Task SetEnableAppProfiler(bool enable)
         {
             if (!await EnsureDaemonReady()) return;
-            var settings = await GetSettings();
+            var settings = await Driver.Instance.GetAppProfilerSettings();
 
             settings.EnableAppProfiler = enable;
 
-            await Driver.Instance.SetSettings(settings);
-            settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+            await Driver.Instance.SetAppProfilerSettings(settings);
 
             System.Console.WriteLine($"Application Profiler enabled: {enable}");
         }

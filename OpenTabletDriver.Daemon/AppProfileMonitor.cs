@@ -34,7 +34,7 @@ namespace OpenTabletDriver.Daemon
             if (_daemon.Settings == null)
                 return;
 
-            var enableAppProfiler = _daemon.Settings.EnableAppProfiler;
+            var enableAppProfiler = _daemon.AppProfilerSettings.EnableAppProfiler;
 
             if (enableAppProfiler && _activeProvider == null)
             {
@@ -64,14 +64,15 @@ namespace OpenTabletDriver.Daemon
 
         private void OnActiveWindowChanged(object? sender, ActiveWindowChangedEventArgs e)
         {
-            if (_daemon.Settings == null || !_daemon.Settings.EnableAppProfiler)
+            if (_daemon.AppProfilerSettings == null || !_daemon.AppProfilerSettings.EnableAppProfiler)
                 return;
 
             var windowClass = e.WindowClass;
             var settings = _daemon.Settings;
+            var appSettings = _daemon.AppProfilerSettings;
             var presetManager = OpenTabletDriver.Desktop.AppInfo.PresetManager;
 
-            if (settings.AppProfiles != null && settings.AppProfiles.TryGetValue(windowClass, out var presetName))
+            if (appSettings.AppProfiles != null && appSettings.AppProfiles.TryGetValue(windowClass, out var presetName))
             {
                 if (presetName != _currentPreset)
                 {
@@ -83,7 +84,7 @@ namespace OpenTabletDriver.Daemon
                         Console.WriteLine($"[AppProfiler] Switching to preset '{preset.Name}' for application '{windowClass}'");
 
                         var appliedSettings = preset.Settings.Clone();
-                        PreserveRuntimeSettings(appliedSettings, settings);
+                        PreserveDisplaySettings(appliedSettings, settings);
 
                         _ = _daemon.SetSettings(appliedSettings);
                         _currentPreset = presetName;
@@ -94,31 +95,26 @@ namespace OpenTabletDriver.Daemon
                     }
                 }
             }
-            else if (!string.IsNullOrEmpty(settings.DefaultAppProfile) && settings.DefaultAppProfile != _currentPreset)
+            else if (!string.IsNullOrEmpty(appSettings.DefaultAppProfile) && appSettings.DefaultAppProfile != _currentPreset)
             {
                 presetManager.Refresh();
-                var preset = presetManager.FindPreset(settings.DefaultAppProfile);
+                var preset = presetManager.FindPreset(appSettings.DefaultAppProfile);
                 if (preset != null)
                 {
                     Log.Write("AppProfileMonitor", $"Applying default preset '{preset.Name}'.", LogLevel.Info);
                     Console.WriteLine($"[AppProfiler] Reverting to default preset '{preset.Name}' for application '{windowClass}'");
 
                     var appliedSettings = preset.Settings.Clone();
-                    PreserveRuntimeSettings(appliedSettings, settings);
+                    PreserveDisplaySettings(appliedSettings, settings);
 
                     _ = _daemon.SetSettings(appliedSettings);
-                    _currentPreset = settings.DefaultAppProfile;
+                    _currentPreset = appSettings.DefaultAppProfile;
                 }
             }
         }
 
-        private static void PreserveRuntimeSettings(Settings appliedSettings, Settings currentSettings)
+        private static void PreserveDisplaySettings(Settings appliedSettings, Settings currentSettings)
         {
-            appliedSettings.EnableAppProfiler = currentSettings.EnableAppProfiler;
-            appliedSettings.AppProfiles = currentSettings.AppProfiles != null
-                ? new Dictionary<string, string>(currentSettings.AppProfiles)
-                : new Dictionary<string, string>();
-            appliedSettings.DefaultAppProfile = currentSettings.DefaultAppProfile;
 
             foreach (var currentProfile in currentSettings.Profiles)
             {

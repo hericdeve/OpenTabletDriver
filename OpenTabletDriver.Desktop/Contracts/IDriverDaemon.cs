@@ -34,6 +34,9 @@ namespace OpenTabletDriver.Desktop.Contracts
         Task<Settings> GetSettings();
         Task ResetSettings();
 
+        Task SetAppProfilerSettings(AppProfilerSettings settings);
+        Task<AppProfilerSettings> GetAppProfilerSettings();
+
         Task<AppInfo> GetApplicationInfo();
 
         Task SetTabletDebug(bool isEnabled);

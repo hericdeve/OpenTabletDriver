@@ -188,6 +188,13 @@ namespace OpenTabletDriver.UX
             get => this.settings;
         }
 
+        private AppProfilerSettings appProfilerSettings;
+        public AppProfilerSettings AppProfilerSettings
+        {
+            set => this.RaiseAndSetIfChanged(ref this.appProfilerSettings, value);
+            get => this.appProfilerSettings;
+        }
+
         private const string APPNAME = "OpenTabletDriver.UX";
         public readonly static bool EnableTrayIcon = (PluginPlatform.Windows | PluginPlatform.MacOS).HasFlag(SystemInterop.CurrentPlatform);
         public readonly static bool EnableDaemonWatchdog = (PluginPlatform.Windows | PluginPlatform.MacOS).HasFlag(SystemInterop.CurrentPlatform);

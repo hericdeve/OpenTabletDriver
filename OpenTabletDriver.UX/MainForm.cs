@@ -290,20 +290,19 @@ namespace OpenTabletDriver.UX
             var toggleAppPresets = new CheckCommand { MenuText = "Enable app profiling" };
             App.Current.PropertyChanged += (sender, e) =>
             {
-                if (e.PropertyName == nameof(App.Settings) && App.Current.Settings != null)
-                    toggleAppPresets.Checked = App.Current.Settings.EnableAppProfiler;
+                if (e.PropertyName == nameof(App.AppProfilerSettings) && App.Current.AppProfilerSettings != null)
+                    toggleAppPresets.Checked = App.Current.AppProfilerSettings.EnableAppProfiler;
             };
             toggleAppPresets.Executed += async (sender, e) =>
             {
-                if (App.Current.Settings is Settings settings)
+                if (App.Current.AppProfilerSettings is AppProfilerSettings appSettings)
                 {
-                    settings.EnableAppProfiler = toggleAppPresets.Checked;
-                    await App.Driver.Instance.SetSettings(settings);
-                    settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+                    appSettings.EnableAppProfiler = toggleAppPresets.Checked;
+                    await App.Driver.Instance.SetAppProfilerSettings(appSettings);
                 }
             };
-            if (App.Current.Settings != null)
-                toggleAppPresets.Checked = App.Current.Settings.EnableAppProfiler;
+            if (App.Current.AppProfilerSettings != null)
+                toggleAppPresets.Checked = App.Current.AppProfilerSettings.EnableAppProfiler;
 
             var detectTablet = new Command { MenuText = "Detect tablet", Shortcut = Application.Instance.CommonModifier | Keys.D };
             detectTablet.Executed += async (sender, e) => await DetectTablet();
@@ -594,6 +593,7 @@ namespace OpenTabletDriver.UX
         private static async Task SyncSettings()
         {
             App.Current.Settings = await App.Driver.Instance.GetSettings();
+            App.Current.AppProfilerSettings = await App.Driver.Instance.GetAppProfilerSettings();
         }
 
         private async Task LoadSettingsDialog()
@@ -827,11 +827,13 @@ namespace OpenTabletDriver.UX
                     settings.Serialize(file);
                     await RefreshPresets();
 
-                    settings.AppProfiles ??= new Dictionary<string, string>();
-                    settings.AppProfiles[txtClass.Text] = txtName.Text;
-                    settings.EnableAppProfiler = true;
-                    await App.Driver.Instance.SetSettings(settings);
-                    settings.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+                    if (App.Current.AppProfilerSettings is AppProfilerSettings appSettings)
+                    {
+                        appSettings.AppProfiles ??= new Dictionary<string, string>();
+                        appSettings.AppProfiles[txtClass.Text] = txtName.Text;
+                        appSettings.EnableAppProfiler = true;
+                        await App.Driver.Instance.SetAppProfilerSettings(appSettings);
+                    }
                 }
             }
         }
@@ -844,12 +846,6 @@ namespace OpenTabletDriver.UX
             if (preset != null && App.Current.Settings is Settings currentSettings)
             {
                 var settingsToApply = preset.Settings.Clone();
-
-                settingsToApply.EnableAppProfiler = false;
-                settingsToApply.DefaultAppProfile = currentSettings.DefaultAppProfile;
-                settingsToApply.AppProfiles = currentSettings.AppProfiles != null
-                    ? new System.Collections.Generic.Dictionary<string, string>(currentSettings.AppProfiles)
-                    : new System.Collections.Generic.Dictionary<string, string>();
 
                 await App.Driver.Instance.SetSettings(settingsToApply);
                 settingsToApply.Serialize(new FileInfo(AppInfo.Current.SettingsFile));

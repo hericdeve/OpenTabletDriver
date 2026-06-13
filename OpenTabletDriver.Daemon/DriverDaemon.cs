@@ -139,6 +139,7 @@ namespace OpenTabletDriver.Daemon
 
         public Driver Driver { get; }
         public Settings? Settings { set; get; }
+        public AppProfilerSettings AppProfilerSettings { get; private set; } = new AppProfilerSettings();
         private Collection<ITool> Tools { set; get; } = new Collection<ITool>();
         private readonly IUpdater? Updater = DesktopInterop.Updater;
         private readonly ISleepDetector? SleepDetector = new SleepDetector();
@@ -387,6 +388,12 @@ namespace OpenTabletDriver.Daemon
             }
 
             var settingsFile = new FileInfo(AppInfo.Current.SettingsFile);
+            var appProfilesFile = new FileInfo(AppInfo.Current.AppProfilesFile);
+
+            if (AppProfilerSettings.TryDeserialize(appProfilesFile, out var appProfilerSettings) && appProfilerSettings != null)
+            {
+                AppProfilerSettings = appProfilerSettings;
+            }
 
             if (settingsFile.Exists)
             {
@@ -661,7 +668,21 @@ namespace OpenTabletDriver.Daemon
 
         public Task<Settings> GetSettings()
         {
-            return Task.FromResult(Settings!);
+            return Task.FromResult(Settings ?? Settings.GetDefaults());
+        }
+
+        public Task SetAppProfilerSettings(AppProfilerSettings settings)
+        {
+            AppProfilerSettings = settings ?? new AppProfilerSettings();
+            var file = new FileInfo(AppInfo.Current.AppProfilesFile);
+            AppProfilerSettings.Serialize(file);
+            _appProfileMonitor.Initialize();
+            return Task.CompletedTask;
+        }
+
+        public Task<AppProfilerSettings> GetAppProfilerSettings()
+        {
+            return Task.FromResult(AppProfilerSettings);
         }
 
         public Task<IEnumerable<SerializedDeviceEndpoint>> GetDevices()
