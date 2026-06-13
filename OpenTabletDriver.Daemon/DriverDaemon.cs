@@ -677,6 +677,7 @@ namespace OpenTabletDriver.Daemon
             var file = new FileInfo(AppInfo.Current.AppProfilesFile);
             AppProfilerSettings.Serialize(file);
             _appProfileMonitor.Initialize();
+            Resynchronize?.Invoke(this, EventArgs.Empty);
             return Task.CompletedTask;
         }
 
