@@ -44,6 +44,30 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
             }
         }
 
+        public void ForceRefreshActiveWindow()
+        {
+            var ipcService = new HyprlandIpcService();
+            var response = ipcService.SendCommand("j/activewindow");
+            if (string.IsNullOrEmpty(response))
+                return;
+
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(response);
+                if (doc.RootElement.TryGetProperty("class", out var classElement) && 
+                    doc.RootElement.TryGetProperty("title", out var titleElement))
+                {
+                    var windowClass = classElement.GetString() ?? string.Empty;
+                    var windowTitle = titleElement.GetString() ?? string.Empty;
+                    ActiveWindowChanged?.Invoke(this, new ActiveWindowChangedEventArgs(windowClass, windowTitle));
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Write("HyprlandAppProfiler", $"Failed to force refresh active window: {ex.Message}", LogLevel.Error);
+            }
+        }
+
         private async Task ReadSocketAsync(CancellationToken token)
         {
             var hyprlandSignature = Environment.GetEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE");

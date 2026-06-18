@@ -18,6 +18,8 @@ namespace OpenTabletDriver.Daemon
         private IActiveWindowProvider? _activeProvider;
         private string? _currentPreset;
         private string? _currentOutputMode;
+        private HyprlandTrackingThread? _layerTracker;
+        private bool _isHoveringLayer = false;
 
         public AppProfileMonitor(DriverDaemon daemon)
         {
@@ -48,6 +50,15 @@ namespace OpenTabletDriver.Daemon
                     _activeProvider.MonitorsChanged += OnMonitorsChanged;
                     _activeProvider.Start();
                     Log.Write("AppProfileMonitor", "Application Profiler started.", LogLevel.Info);
+
+                    if (_activeProvider is HyprlandWindowProvider)
+                    {
+                        var targets = new[] { "noctalia-bar-Main", "noctalia-bar-Secondary", "noctalia-desktop-widget" };
+                        _layerTracker = new HyprlandTrackingThread(targets);
+                        _layerTracker.LayerHoverStateChanged += OnLayerHoverStateChanged;
+                        _layerTracker.Start();
+                        Log.Write("AppProfileMonitor", "Hyprland Layer Tracker started.", LogLevel.Info);
+                    }
                 }
                 else
                 {
@@ -61,6 +72,32 @@ namespace OpenTabletDriver.Daemon
                 _activeProvider.MonitorsChanged -= OnMonitorsChanged;
                 _activeProvider = null;
                 Log.Write("AppProfileMonitor", "Application Profiler stopped.", LogLevel.Info);
+
+                if (_layerTracker != null)
+                {
+                    _layerTracker.LayerHoverStateChanged -= OnLayerHoverStateChanged;
+                    _layerTracker.Dispose();
+                    _layerTracker = null;
+                }
+            }
+        }
+
+        private void OnLayerHoverStateChanged(object? sender, bool isHovering)
+        {
+            _isHoveringLayer = isHovering;
+
+            if (isHovering)
+            {
+                Log.Write("AppProfileMonitor", "Cursor entered a tracked layer. Enforcing default profile.", LogLevel.Info);
+                OnActiveWindowChanged(this, new ActiveWindowChangedEventArgs("", ""));
+            }
+            else
+            {
+                Log.Write("AppProfileMonitor", "Cursor exited tracked layer. Restoring active window profile.", LogLevel.Info);
+                if (_activeProvider is HyprlandWindowProvider hyprlandProvider)
+                {
+                    hyprlandProvider.ForceRefreshActiveWindow();
+                }
             }
         }
 
@@ -68,6 +105,12 @@ namespace OpenTabletDriver.Daemon
         {
             if (_daemon.AppProfilerSettings == null || !_daemon.AppProfilerSettings.EnableAppProfiler)
                 return;
+
+            if (_isHoveringLayer && !string.IsNullOrEmpty(e.WindowClass))
+            {
+                // Ignore real window focus changes while hovering a layer
+                return;
+            }
 
             var windowClass = e.WindowClass;
             var settings = _daemon.Settings;
@@ -272,6 +315,14 @@ namespace OpenTabletDriver.Daemon
                 _activeProvider.MonitorsChanged -= OnMonitorsChanged;
                 _activeProvider = null;
             }
+
+            if (_layerTracker != null)
+            {
+                _layerTracker.LayerHoverStateChanged -= OnLayerHoverStateChanged;
+                _layerTracker.Dispose();
+                _layerTracker = null;
+            }
+
             GC.SuppressFinalize(this);
         }
     }
