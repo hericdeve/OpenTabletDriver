@@ -19,6 +19,8 @@ using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Logging;
 using OpenTabletDriver.Plugin.Tablet;
 using OpenTabletDriver.UX.Controls;
+using OpenTabletDriver.UX.Controls.Generic.Reflection;
+using OpenTabletDriver.Plugin.Output;
 
 namespace OpenTabletDriver.UX
 {
@@ -287,6 +289,9 @@ namespace OpenTabletDriver.UX
             var saveAppPreset = new Command { MenuText = "Save as app preset..." };
             saveAppPreset.Executed += async (sender, e) => await SaveAppPresetDialog();
 
+            var saveAppMode = new Command { MenuText = "Map to app mode..." };
+            saveAppMode.Executed += async (sender, e) => await SaveAppModeDialog();
+
             var toggleAppPresets = new CheckCommand { MenuText = "Enable app profiling" };
             App.Current.PropertyChanged += (sender, e) =>
             {
@@ -350,6 +355,7 @@ namespace OpenTabletDriver.UX
                             refreshPresets,
                             savePreset,
                             saveAppPreset,
+                            saveAppMode,
                             toggleAppPresets,
                             new ButtonMenuItem
                             {
@@ -834,6 +840,51 @@ namespace OpenTabletDriver.UX
                         appSettings.EnableAppProfiler = true;
                         await App.Driver.Instance.SetAppProfilerSettings(appSettings);
                     }
+                }
+            }
+        }
+
+        private async Task SaveAppModeDialog()
+        {
+            var outputModeSelector = new TypeDropDown<IOutputMode>();
+            var txtClass = new TextBox();
+
+            var dialog = new Dialog<DialogResult>
+            {
+                Title = "Map App Mode",
+                WindowStyle = WindowStyle.Default,
+                Content = new TableLayout
+                {
+                    Padding = new Padding(10),
+                    Spacing = new Size(5, 5),
+                    Rows =
+                    {
+                        new TableRow(new Label { Text = "Output Mode:" }, outputModeSelector),
+                        new TableRow(new Label { Text = "Window Class:" }, txtClass),
+                        null
+                    }
+                }
+            };
+
+            var ok = new Button { Text = "Save" };
+            ok.Click += (s, e) => dialog.Close(DialogResult.Ok);
+            dialog.DefaultButton = ok;
+
+            var cancel = new Button { Text = "Cancel" };
+            cancel.Click += (s, e) => dialog.Close(DialogResult.Cancel);
+            dialog.AbortButton = cancel;
+
+            dialog.PositiveButtons.Add(ok);
+            dialog.NegativeButtons.Add(cancel);
+
+            if (dialog.ShowModal(this) == DialogResult.Ok && outputModeSelector.SelectedItem != null && !string.IsNullOrWhiteSpace(txtClass.Text))
+            {
+                if (App.Current.AppProfilerSettings is AppProfilerSettings appSettings)
+                {
+                    appSettings.AppOutputModes ??= new Dictionary<string, string>();
+                    appSettings.AppOutputModes[txtClass.Text] = outputModeSelector.SelectedItem!.FullName;
+                    appSettings.EnableAppProfiler = true;
+                    await App.Driver.Instance.SetAppProfilerSettings(appSettings);
                 }
             }
         }
