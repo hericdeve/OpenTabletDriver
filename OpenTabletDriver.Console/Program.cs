@@ -101,6 +101,7 @@ namespace OpenTabletDriver.Console
             CreateCommand<string, string>(SetAppRule, "Maps a window class to a preset", "add-app-rule"),
             CreateCommand<string>(RemoveAppRule, "Removes an application preset mapping", "remove-app-rule"),
             CreateCommand<string>(SetDefaultAppRule, "Sets the default preset for unmapped applications", "set-default-app-rule"),
+            CreateCommand<string>(SetDefaultAppMode, "Sets the default output mode for unmapped applications", "set-default-app-mode"),
             CreateCommand<bool>(SetEnableAppProfiler, "Enables or disables application profiling", "set-enable-app-profiler"),
         ];
 

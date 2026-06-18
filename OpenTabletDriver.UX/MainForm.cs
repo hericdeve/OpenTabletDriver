@@ -292,6 +292,12 @@ namespace OpenTabletDriver.UX
             var saveAppMode = new Command { MenuText = "Map to app mode..." };
             saveAppMode.Executed += async (sender, e) => await SaveAppModeDialog();
 
+            var setDefaultAppPreset = new Command { MenuText = "Set default app preset..." };
+            setDefaultAppPreset.Executed += async (sender, e) => await SetDefaultAppPresetDialog();
+
+            var setDefaultAppMode = new Command { MenuText = "Set default app mode..." };
+            setDefaultAppMode.Executed += async (sender, e) => await SetDefaultAppModeDialog();
+
             var toggleAppPresets = new CheckCommand { MenuText = "Enable app profiling" };
             App.Current.PropertyChanged += (sender, e) =>
             {
@@ -356,6 +362,8 @@ namespace OpenTabletDriver.UX
                             savePreset,
                             saveAppPreset,
                             saveAppMode,
+                            setDefaultAppPreset,
+                            setDefaultAppMode,
                             toggleAppPresets,
                             new ButtonMenuItem
                             {
@@ -883,6 +891,91 @@ namespace OpenTabletDriver.UX
                 {
                     appSettings.AppOutputModes ??= new Dictionary<string, string>();
                     appSettings.AppOutputModes[txtClass.Text] = outputModeSelector.SelectedItem!.FullName;
+                    appSettings.EnableAppProfiler = true;
+                    await App.Driver.Instance.SetAppProfilerSettings(appSettings);
+                }
+            }
+        }
+
+        private async Task SetDefaultAppPresetDialog()
+        {
+            var presetBox = new ComboBox();
+            presetBox.DataStore = AppInfo.PresetManager.GetPresets().Select(p => p.Name).ToList();
+
+            var dialog = new Dialog<DialogResult>
+            {
+                Title = "Set Default App Preset",
+                WindowStyle = WindowStyle.Default,
+                Content = new TableLayout
+                {
+                    Padding = new Padding(10),
+                    Spacing = new Size(5, 5),
+                    Rows =
+                    {
+                        new TableRow(new Label { Text = "Preset:" }, presetBox),
+                        null
+                    }
+                }
+            };
+
+            var ok = new Button { Text = "Save" };
+            ok.Click += (s, e) => dialog.Close(DialogResult.Ok);
+            dialog.DefaultButton = ok;
+
+            var cancel = new Button { Text = "Cancel" };
+            cancel.Click += (s, e) => dialog.Close(DialogResult.Cancel);
+            dialog.AbortButton = cancel;
+
+            dialog.PositiveButtons.Add(ok);
+            dialog.NegativeButtons.Add(cancel);
+
+            if (dialog.ShowModal(this) == DialogResult.Ok && !string.IsNullOrWhiteSpace(presetBox.Text))
+            {
+                if (App.Current.AppProfilerSettings is AppProfilerSettings appSettings)
+                {
+                    appSettings.DefaultAppProfile = presetBox.Text;
+                    appSettings.EnableAppProfiler = true;
+                    await App.Driver.Instance.SetAppProfilerSettings(appSettings);
+                }
+            }
+        }
+
+        private async Task SetDefaultAppModeDialog()
+        {
+            var outputModeSelector = new TypeDropDown<IOutputMode>();
+
+            var dialog = new Dialog<DialogResult>
+            {
+                Title = "Set Default App Mode",
+                WindowStyle = WindowStyle.Default,
+                Content = new TableLayout
+                {
+                    Padding = new Padding(10),
+                    Spacing = new Size(5, 5),
+                    Rows =
+                    {
+                        new TableRow(new Label { Text = "Output Mode:" }, outputModeSelector),
+                        null
+                    }
+                }
+            };
+
+            var ok = new Button { Text = "Save" };
+            ok.Click += (s, e) => dialog.Close(DialogResult.Ok);
+            dialog.DefaultButton = ok;
+
+            var cancel = new Button { Text = "Cancel" };
+            cancel.Click += (s, e) => dialog.Close(DialogResult.Cancel);
+            dialog.AbortButton = cancel;
+
+            dialog.PositiveButtons.Add(ok);
+            dialog.NegativeButtons.Add(cancel);
+
+            if (dialog.ShowModal(this) == DialogResult.Ok && outputModeSelector.SelectedItem != null)
+            {
+                if (App.Current.AppProfilerSettings is AppProfilerSettings appSettings)
+                {
+                    appSettings.DefaultOutputMode = outputModeSelector.SelectedItem!.FullName;
                     appSettings.EnableAppProfiler = true;
                     await App.Driver.Instance.SetAppProfilerSettings(appSettings);
                 }

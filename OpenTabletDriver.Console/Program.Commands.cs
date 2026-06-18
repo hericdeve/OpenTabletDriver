@@ -218,6 +218,28 @@ namespace OpenTabletDriver.Console
             System.Console.WriteLine($"Set default app profile to '{preset.Name}'.");
         }
 
+        private static async Task SetDefaultAppMode(string modeName)
+        {
+            if (!await EnsureDaemonReady()) return;
+
+            var modeType = AppInfo.PluginManager.GetChildTypes<IOutputMode>()
+                .FirstOrDefault(t => t.Name.Contains(modeName, StringComparison.OrdinalIgnoreCase) || t.FullName == modeName);
+
+            if (modeType == null)
+            {
+                Error.WriteLine($"Output mode '{modeName}' was not found.");
+                return;
+            }
+
+            var settings = await Driver.Instance.GetAppProfilerSettings();
+
+            settings.DefaultOutputMode = modeType.FullName;
+
+            await Driver.Instance.SetAppProfilerSettings(settings);
+
+            System.Console.WriteLine($"Set default output mode to '{modeType.FullName}'.");
+        }
+
         private static async Task SetEnableAppProfiler(bool enable)
         {
             if (!await EnsureDaemonReady()) return;
