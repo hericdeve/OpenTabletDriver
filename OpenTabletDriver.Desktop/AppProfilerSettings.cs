@@ -17,6 +17,12 @@ namespace OpenTabletDriver.Desktop
         [JsonProperty("appProfiles")]
         public Dictionary<string, string> AppProfiles { get; set; } = new Dictionary<string, string>();
 
+        [JsonProperty("defaultOutputMode")]
+        public string? DefaultOutputMode { get; set; }
+
+        [JsonProperty("appOutputModes")]
+        public Dictionary<string, string> AppOutputModes { get; set; } = new Dictionary<string, string>();
+
         public void Serialize(FileInfo file)
         {
             var serializer = new JsonSerializer { Formatting = Formatting.Indented };

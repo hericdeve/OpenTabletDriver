@@ -4,6 +4,7 @@ using System.Linq;
 using OpenTabletDriver.Desktop;
 using OpenTabletDriver.Desktop.Interop.AppProfiler;
 using OpenTabletDriver.Desktop.Profiles;
+using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.Plugin;
 
 #nullable enable
@@ -16,6 +17,7 @@ namespace OpenTabletDriver.Daemon
         private readonly List<IActiveWindowProvider> _providers;
         private IActiveWindowProvider? _activeProvider;
         private string? _currentPreset;
+        private string? _currentOutputMode;
 
         public AppProfileMonitor(DriverDaemon daemon)
         {
@@ -72,44 +74,82 @@ namespace OpenTabletDriver.Daemon
             var appSettings = _daemon.AppProfilerSettings;
             var presetManager = OpenTabletDriver.Desktop.AppInfo.PresetManager;
 
+            string? targetPreset = null;
             if (appSettings.AppProfiles != null && appSettings.AppProfiles.TryGetValue(windowClass, out var presetName))
             {
-                if (presetName != _currentPreset)
+                targetPreset = presetName;
+            }
+            else if (!string.IsNullOrEmpty(appSettings.DefaultAppProfile))
+            {
+                targetPreset = appSettings.DefaultAppProfile;
+            }
+
+            string? targetOutputMode = null;
+            if (appSettings.AppOutputModes != null && appSettings.AppOutputModes.TryGetValue(windowClass, out var outputModeName))
+            {
+                targetOutputMode = outputModeName;
+            }
+            else if (!string.IsNullOrEmpty(appSettings.DefaultOutputMode))
+            {
+                targetOutputMode = appSettings.DefaultOutputMode;
+            }
+
+            bool presetChanged = targetPreset != _currentPreset;
+            bool outputModeChanged = targetOutputMode != _currentOutputMode;
+
+            if (presetChanged || outputModeChanged)
+            {
+                Settings appliedSettings;
+
+                if (presetChanged && targetPreset != null)
                 {
                     presetManager.Refresh();
-                    var preset = presetManager.FindPreset(presetName);
+                    var preset = presetManager.FindPreset(targetPreset);
                     if (preset != null)
                     {
                         Log.Write("AppProfileMonitor", $"Applying preset '{preset.Name}' for application '{windowClass}'.", LogLevel.Info);
                         Console.WriteLine($"[AppProfiler] Switching to preset '{preset.Name}' for application '{windowClass}'");
 
-                        var appliedSettings = preset.Settings.Clone();
-                        PreserveDisplaySettings(appliedSettings, settings);
-
-                        _ = _daemon.SetSettings(appliedSettings);
-                        _currentPreset = presetName;
+                        appliedSettings = preset.Settings.Clone();
+                        _currentPreset = targetPreset;
                     }
                     else
                     {
-                        Log.Write("AppProfileMonitor", $"Preset '{presetName}' mapped to '{windowClass}' not found.", LogLevel.Error);
+                        Log.Write("AppProfileMonitor", $"Preset '{targetPreset}' not found.", LogLevel.Error);
+                        appliedSettings = settings.Clone();
                     }
                 }
-            }
-            else if (!string.IsNullOrEmpty(appSettings.DefaultAppProfile) && appSettings.DefaultAppProfile != _currentPreset)
-            {
-                presetManager.Refresh();
-                var preset = presetManager.FindPreset(appSettings.DefaultAppProfile);
-                if (preset != null)
+                else
                 {
-                    Log.Write("AppProfileMonitor", $"Applying default preset '{preset.Name}'.", LogLevel.Info);
-                    Console.WriteLine($"[AppProfiler] Reverting to default preset '{preset.Name}' for application '{windowClass}'");
-
-                    var appliedSettings = preset.Settings.Clone();
-                    PreserveDisplaySettings(appliedSettings, settings);
-
-                    _ = _daemon.SetSettings(appliedSettings);
-                    _currentPreset = appSettings.DefaultAppProfile;
+                    appliedSettings = settings.Clone();
                 }
+
+                if (presetChanged)
+                {
+                    PreserveDisplaySettings(appliedSettings, settings);
+                }
+
+                if (targetOutputMode != null && (outputModeChanged || presetChanged))
+                {
+                    var newOutputModeStore = PluginSettingStore.FromPath(targetOutputMode);
+                    if (newOutputModeStore != null)
+                    {
+                        Log.Write("AppProfileMonitor", $"Applying output mode '{targetOutputMode}' for application '{windowClass}'.", LogLevel.Info);
+                        Console.WriteLine($"[AppProfiler] Switching to output mode '{targetOutputMode}' for application '{windowClass}'");
+
+                        foreach (var profile in appliedSettings.Profiles)
+                        {
+                            profile.OutputMode = newOutputModeStore;
+                        }
+                        _currentOutputMode = targetOutputMode;
+                    }
+                    else
+                    {
+                        Log.Write("AppProfileMonitor", $"Output mode '{targetOutputMode}' not found.", LogLevel.Error);
+                    }
+                }
+
+                _ = _daemon.SetSettings(appliedSettings);
             }
         }
 
