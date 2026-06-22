@@ -53,8 +53,15 @@ namespace OpenTabletDriver.Daemon
 
                     if (_activeProvider is HyprlandWindowProvider)
                     {
-                        var targets = new[] { "noctalia-bar-Main", "noctalia-bar-Secondary", "noctalia-desktop-widget" };
-                        _layerTracker = new HyprlandTrackingThread(targets);
+                        var targets = new List<string>();
+                        if (_daemon.AppProfilerSettings.TrackedNamespaces != null)
+                            targets.AddRange(_daemon.AppProfilerSettings.TrackedNamespaces);
+                        if (_daemon.AppProfilerSettings.NamespaceProfiles != null)
+                            targets.AddRange(_daemon.AppProfilerSettings.NamespaceProfiles.Keys);
+                        if (_daemon.AppProfilerSettings.NamespaceOutputModes != null)
+                            targets.AddRange(_daemon.AppProfilerSettings.NamespaceOutputModes.Keys);
+
+                        _layerTracker = new HyprlandTrackingThread(targets.Distinct());
                         _layerTracker.LayerHoverStateChanged += OnLayerHoverStateChanged;
                         _layerTracker.Start();
                         Log.Write("AppProfileMonitor", "Hyprland Layer Tracker started.", LogLevel.Info);
@@ -82,13 +89,16 @@ namespace OpenTabletDriver.Daemon
             }
         }
 
-        private void OnLayerHoverStateChanged(object? sender, bool isHovering)
-        {
-            _isHoveringLayer = isHovering;
+        private string? _hoveredNamespace;
 
-            if (isHovering)
+        private void OnLayerHoverStateChanged(object? sender, HyprlandTrackingThread.LayerHoverStateChangedEventArgs e)
+        {
+            _isHoveringLayer = e.IsHovering;
+            _hoveredNamespace = e.Namespace;
+
+            if (e.IsHovering)
             {
-                Log.Write("AppProfileMonitor", "Cursor entered a tracked layer. Enforcing default profile.", LogLevel.Info);
+                Log.Write("AppProfileMonitor", $"Cursor entered a tracked layer ({e.Namespace}).", LogLevel.Info);
                 OnActiveWindowChanged(this, new ActiveWindowChangedEventArgs("", ""));
             }
             else
@@ -118,7 +128,11 @@ namespace OpenTabletDriver.Daemon
             var presetManager = OpenTabletDriver.Desktop.AppInfo.PresetManager;
 
             string? targetPreset = null;
-            if (appSettings.AppProfiles != null && appSettings.AppProfiles.TryGetValue(windowClass, out var presetName))
+            if (_isHoveringLayer && !string.IsNullOrEmpty(_hoveredNamespace) && appSettings.NamespaceProfiles != null && appSettings.NamespaceProfiles.TryGetValue(_hoveredNamespace, out var nsPreset))
+            {
+                targetPreset = nsPreset;
+            }
+            else if (!_isHoveringLayer && appSettings.AppProfiles != null && appSettings.AppProfiles.TryGetValue(windowClass, out var presetName))
             {
                 targetPreset = presetName;
             }
@@ -128,7 +142,11 @@ namespace OpenTabletDriver.Daemon
             }
 
             string? targetOutputMode = null;
-            if (appSettings.AppOutputModes != null && appSettings.AppOutputModes.TryGetValue(windowClass, out var outputModeName))
+            if (_isHoveringLayer && !string.IsNullOrEmpty(_hoveredNamespace) && appSettings.NamespaceOutputModes != null && appSettings.NamespaceOutputModes.TryGetValue(_hoveredNamespace, out var nsOutputMode))
+            {
+                targetOutputMode = nsOutputMode;
+            }
+            else if (!_isHoveringLayer && appSettings.AppOutputModes != null && appSettings.AppOutputModes.TryGetValue(windowClass, out var outputModeName))
             {
                 targetOutputMode = outputModeName;
             }

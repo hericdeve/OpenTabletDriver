@@ -23,6 +23,15 @@ namespace OpenTabletDriver.Desktop
         [JsonProperty("appOutputModes")]
         public Dictionary<string, string> AppOutputModes { get; set; } = new Dictionary<string, string>();
 
+        [JsonProperty("trackedNamespaces")]
+        public List<string> TrackedNamespaces { get; set; } = new List<string>();
+
+        [JsonProperty("namespaceProfiles")]
+        public Dictionary<string, string> NamespaceProfiles { get; set; } = new Dictionary<string, string>();
+
+        [JsonProperty("namespaceOutputModes")]
+        public Dictionary<string, string> NamespaceOutputModes { get; set; } = new Dictionary<string, string>();
+
         public void Serialize(FileInfo file)
         {
             var serializer = new JsonSerializer { Formatting = Formatting.Indented };

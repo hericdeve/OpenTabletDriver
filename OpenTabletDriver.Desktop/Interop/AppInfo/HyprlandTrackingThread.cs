@@ -23,8 +23,21 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
         private Task? _eventTask;
         private Task? _pollingTask;
         private bool _isHoveringLayer = false;
+        private string? _hoveredNamespace = null;
 
-        public event EventHandler<bool>? LayerHoverStateChanged;
+        public class LayerHoverStateChangedEventArgs : EventArgs
+        {
+            public bool IsHovering { get; }
+            public string? Namespace { get; }
+
+            public LayerHoverStateChangedEventArgs(bool isHovering, string? ns)
+            {
+                IsHovering = isHovering;
+                Namespace = ns;
+            }
+        }
+
+        public event EventHandler<LayerHoverStateChangedEventArgs>? LayerHoverStateChanged;
 
         public HyprlandTrackingThread(IEnumerable<string> targetNamespaces)
         {
@@ -129,6 +142,7 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
 
                     bool isInside = false;
                     bool isNear = false;
+                    string? currentNamespace = null;
                     const int proximity = 150;
 
                     lock (_layerLock)
@@ -139,6 +153,7 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
                             {
                                 isInside = true;
                                 isNear = true;
+                                currentNamespace = layer.Namespace;
                                 break;
                             }
                             
@@ -152,10 +167,11 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
                         }
                     }
 
-                    if (isInside != _isHoveringLayer)
+                    if (isInside != _isHoveringLayer || currentNamespace != _hoveredNamespace)
                     {
                         _isHoveringLayer = isInside;
-                        LayerHoverStateChanged?.Invoke(this, _isHoveringLayer);
+                        _hoveredNamespace = currentNamespace;
+                        LayerHoverStateChanged?.Invoke(this, new LayerHoverStateChangedEventArgs(_isHoveringLayer, _hoveredNamespace));
                     }
 
                     sleepInterval = isNear ? 25 : 200;
