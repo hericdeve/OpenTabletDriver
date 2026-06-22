@@ -56,10 +56,6 @@ namespace OpenTabletDriver.Daemon
                         var targets = new List<string>();
                         if (_daemon.AppProfilerSettings.TrackedNamespaces != null)
                             targets.AddRange(_daemon.AppProfilerSettings.TrackedNamespaces);
-                        if (_daemon.AppProfilerSettings.NamespaceProfiles != null)
-                            targets.AddRange(_daemon.AppProfilerSettings.NamespaceProfiles.Keys);
-                        if (_daemon.AppProfilerSettings.NamespaceOutputModes != null)
-                            targets.AddRange(_daemon.AppProfilerSettings.NamespaceOutputModes.Keys);
 
                         _layerTracker = new HyprlandTrackingThread(targets.Distinct());
                         _layerTracker.LayerHoverStateChanged += OnLayerHoverStateChanged;
