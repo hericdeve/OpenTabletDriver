@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Attributes;
 using OpenTabletDriver.Plugin.DependencyInjection;
@@ -18,11 +20,22 @@ namespace OpenTabletDriver.Desktop.Binding
         private string? _tapKeysString;
         private string? _holdKeysString;
 
-        // Lazily resolved after keyboard is injected by [OnDependencyLoad]
+        // Populated in OnDependencyLoad, after Keyboard is injected.
         private string[] _tapKeys = [];
         private string[] _holdKeys = [];
 
-        private readonly HPETDeltaStopwatch _pressStopwatch = new HPETDeltaStopwatch(startRunning: false);
+        // --- State machine ---
+        // _holdActivated  : set to true once the threshold is reached and we DECIDE to run the hold action.
+        // _holdKeysDown   : set to true only AFTER Keyboard.Press(_holdKeys) physically returns.
+        //                   Whoever sets this to false is responsible for calling Keyboard.Release.
+        private bool _isPressed;
+        private bool _holdActivated;
+        private bool _holdKeysDown;
+
+        private CancellationTokenSource? _cts;
+        private readonly object _stateLock = new object();
+
+        private readonly HPETDeltaStopwatch _stopwatch = new HPETDeltaStopwatch(startRunning: false);
 
         [Resolved]
         public IVirtualKeyboard? Keyboard { set; get; }
@@ -34,8 +47,8 @@ namespace OpenTabletDriver.Desktop.Binding
                 Log.Write(PLUGIN_NAME,
                     $"{nameof(IVirtualKeyboard)} unavailable. {PLUGIN_NAME} will not work.", LogLevel.Error);
 
-            // Re-parse now that keyboard is injected and SupportedKeys is available.
-            // Properties are set before [Resolved] runs, so we must re-parse here.
+            // Properties are set before [Resolved] runs, so Keyboard was null during the setters.
+            // Re-parse now that the keyboard is available for SupportedKeys validation.
             _tapKeys = ParseKeys(_tapKeysString);
             _holdKeys = ParseKeys(_holdKeysString);
         }
@@ -48,19 +61,19 @@ namespace OpenTabletDriver.Desktop.Binding
             set
             {
                 _tapKeysString = value;
-                _tapKeys = ParseKeys(value); // Keyboard may still be null here; OnDependencyLoad re-parses
+                _tapKeys = ParseKeys(value);
             }
         }
 
         [Property("Hold Keys")]
-        [ToolTip("Key combo to activate when held past the threshold (e.g. Ctrl+Shift+Z). Separate keys with '+'.")]
+        [ToolTip("Key combo to activate when held past the threshold. Fires immediately when threshold is reached. Separate keys with '+'.")]
         public string? HoldKeys
         {
             get => _holdKeysString;
             set
             {
                 _holdKeysString = value;
-                _holdKeys = ParseKeys(value); // Keyboard may still be null here; OnDependencyLoad re-parses
+                _holdKeys = ParseKeys(value);
             }
         }
 
@@ -70,22 +83,124 @@ namespace OpenTabletDriver.Desktop.Binding
 
         public void Press(TabletReference tablet, IDeviceReport report)
         {
-            // Just record when the button went down. No keys fire on press.
-            _pressStopwatch.Restart();
+            CancellationTokenSource? oldCts;
+            CancellationTokenSource newCts;
+
+            lock (_stateLock)
+            {
+                if (_isPressed)
+                    return;
+
+                _isPressed = true;
+                _holdActivated = false;
+                _holdKeysDown = false;
+
+                oldCts = _cts;
+                newCts = _cts = new CancellationTokenSource();
+            }
+
+            // Cancel any stale task from a previous press (belt-and-suspenders).
+            oldCts?.Cancel();
+            oldCts?.Dispose();
+
+            _stopwatch.Restart();
+
+            var token = newCts.Token;
+            var delayMs = (int)Math.Max(1d, HoldThresholdMs);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    // Wait for the hold threshold. Throws OperationCanceledException if button
+                    // is released before the delay completes.
+                    await Task.Delay(delayMs, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Button was released before the threshold — tap fires in Release().
+                    return;
+                }
+
+                // --- Threshold reached ---
+
+                // Check (under lock) that the button is still held before committing.
+                lock (_stateLock)
+                {
+                    if (!_isPressed)
+                        return; // Released at exactly the threshold moment; tap fires in Release().
+
+                    _holdActivated = true;
+                }
+
+                // Press the hold keys. This happens OUTSIDE the lock to avoid blocking
+                // the report pipeline, but we reconcile state immediately after.
+                Keyboard?.Press(_holdKeys);
+
+                // Now mark the keys as physically down (or immediately release if the button
+                // was released between Keyboard.Press and this point).
+                bool needImmediateRelease;
+                lock (_stateLock)
+                {
+                    if (_isPressed)
+                    {
+                        _holdKeysDown = true;
+                        needImmediateRelease = false;
+                    }
+                    else
+                    {
+                        // Release() already ran and saw _holdKeysDown=false, so it did not
+                        // release the keys. We must do it here.
+                        needImmediateRelease = true;
+                    }
+                }
+
+                if (needImmediateRelease)
+                    Keyboard?.Release(_holdKeys);
+            }, token);
         }
 
         public void Release(TabletReference tablet, IDeviceReport report)
         {
-            // Measure how long the button was held, then decide which action to fire.
-            double elapsedMs = _pressStopwatch.Stop().TotalMilliseconds;
-            bool isHold = elapsedMs >= HoldThresholdMs;
+            bool wasHold, shouldReleaseHoldKeys;
+            CancellationTokenSource? ctsToCancel;
 
-            var keys = isHold ? _holdKeys : _tapKeys;
-            if (keys.Length > 0)
+            lock (_stateLock)
             {
-                Keyboard?.Press(keys);
-                Keyboard?.Release(keys);
+                if (!_isPressed)
+                    return;
+
+                _isPressed = false;
+                wasHold = _holdActivated;
+                _holdActivated = false;
+                shouldReleaseHoldKeys = _holdKeysDown;
+                _holdKeysDown = false;
+                ctsToCancel = _cts;
+                _cts = null;
             }
+
+            // Cancel the hold-detection task if it hasn't reached the threshold yet.
+            ctsToCancel?.Cancel();
+            ctsToCancel?.Dispose();
+
+            if (shouldReleaseHoldKeys)
+            {
+                // Hold keys were physically down — release them.
+                Keyboard?.Release(_holdKeys);
+            }
+            else if (!wasHold)
+            {
+                // Neither hold state was set: this was a tap.
+                // Fire tap as a momentary press+release.
+                if (_tapKeys.Length > 0)
+                {
+                    Keyboard?.Press(_tapKeys);
+                    Keyboard?.Release(_tapKeys);
+                }
+            }
+            // If wasHold=true but shouldReleaseHoldKeys=false, the background task pressed
+            // the keys but hasn't set _holdKeysDown yet. The task's second lock block will
+            // detect _isPressed=false and call Release itself. Nothing to do here.
         }
 
         private string[] ParseKeys(string? str)
@@ -93,7 +208,8 @@ namespace OpenTabletDriver.Desktop.Binding
             if (str == null) return [];
             var parts = str.Split(KEYS_SPLITTER, StringSplitOptions.TrimEntries);
 
-            // If keyboard isn't resolved yet, store the parts and let OnDependencyLoad validate them.
+            // If keyboard isn't injected yet, store the raw parts.
+            // OnDependencyLoad will re-parse and validate against SupportedKeys.
             if (Keyboard == null) return parts;
 
             return parts.All(k => Keyboard.SupportedKeys.Contains(k)) ? parts : [];
