@@ -139,7 +139,7 @@ namespace OpenTabletDriver.Desktop.Binding
             oldHoldCts?.Cancel();
             oldHoldCts?.Dispose();
 
-            if (newHoldCts != null)
+            if (newHoldCts != null && _holdBinding != null)
                 StartHoldTask(newHoldCts, tablet, report);
         }
 
@@ -177,7 +177,7 @@ namespace OpenTabletDriver.Desktop.Binding
                             _state = GestureState.Idle;
                             postAction = null;
                         }
-                        else if (DoubleClickAction == null)
+                        else if (_doubleClickBinding == null)
                         {
                             // Optimisation: no double-click action configured → fire tap immediately,
                             // skipping the double-click window entirely.
@@ -317,3 +317,5 @@ namespace OpenTabletDriver.Desktop.Binding
             $"{PLUGIN_NAME}: tap={TapAction?.Name ?? "None"} dbl={DoubleClickAction?.Name ?? "None"} hold={HoldAction?.Name ?? "None"}";
     }
 }
+
+
