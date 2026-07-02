@@ -46,6 +46,17 @@ namespace OpenTabletDriver.Desktop.Binding
         private CancellationTokenSource? _holdCts;
         private CancellationTokenSource? _doubleClickCts;
         private readonly object _stateLock = new object();
+        private DateTime _lastReleaseTime;
+
+        private static DateTime _lastHoldActionFiredGlobal;
+        private readonly DateTime _createdAt = DateTime.Now;
+        private readonly bool _isGhostInstance;
+        private bool _firstPressSeen;
+
+        public MultiActionBinding()
+        {
+            _isGhostInstance = (DateTime.Now - _lastHoldActionFiredGlobal < TimeSpan.FromMilliseconds(1000));
+        }
 
         // ── Dependency injection ─────────────────────────────────────────────────
 
@@ -103,6 +114,17 @@ namespace OpenTabletDriver.Desktop.Binding
 
         public void Press(TabletReference tablet, IDeviceReport report)
         {
+            if (DateTime.Now - _lastReleaseTime < TimeSpan.FromMilliseconds(30))
+                return; // Hardware debounce: ignore micro-presses that occur immediately after a release
+
+            if (_isGhostInstance && !_firstPressSeen)
+            {
+                _firstPressSeen = true;
+                if (DateTime.Now - _createdAt < TimeSpan.FromMilliseconds(500))
+                    return; // Ignore ghost presses that happen when the daemon hot-reloads while the button is physically held
+            }
+            _firstPressSeen = true;
+
             CancellationTokenSource? dcCtsToCancel = null;
             CancellationTokenSource? oldHoldCts = null;
             CancellationTokenSource? newHoldCts = null;
@@ -206,6 +228,7 @@ namespace OpenTabletDriver.Desktop.Binding
 
             holdCtsToCancel?.Cancel();
             holdCtsToCancel?.Dispose();
+            _lastReleaseTime = DateTime.Now;
             postAction?.Invoke();
         }
 
@@ -238,7 +261,10 @@ namespace OpenTabletDriver.Desktop.Binding
 
                 // Press hold keys outside the lock to avoid blocking the pipeline.
                 if (_holdBinding is IStateBinding stateHold)
+                {
+                    _lastHoldActionFiredGlobal = DateTime.Now;
                     stateHold.Press(tablet, report);
+                }
 
                 // Reconcile: did Release run while we were pressing?
                 bool needImmediateRelease;
