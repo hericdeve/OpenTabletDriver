@@ -224,8 +224,6 @@ namespace OpenTabletDriver.Desktop.Binding
                 // Press hold keys outside the lock to avoid blocking the pipeline.
                 if (_holdBinding is IStateBinding stateHold)
                     stateHold.Press(tablet, report);
-                else
-                    _holdBinding?.Invoke();
 
                 // Reconcile: did Release run while we were pressing?
                 bool needImmediateRelease;
@@ -291,18 +289,12 @@ namespace OpenTabletDriver.Desktop.Binding
 
         // ── Helpers ───────────────────────────────────────────────────────────────
 
-        private void FireAction(IBinding? binding, TabletReference tablet, IDeviceReport report)
+        private static void FireAction(IBinding? binding, TabletReference tablet, IDeviceReport report)
         {
-            if (binding == null) return;
-            
             if (binding is IStateBinding stateBinding)
             {
                 stateBinding.Press(tablet, report);
                 stateBinding.Release(tablet, report);
-            }
-            else
-            {
-                binding.Invoke();
             }
         }
 

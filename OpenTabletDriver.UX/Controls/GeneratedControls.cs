@@ -103,6 +103,12 @@ namespace OpenTabletDriver.UX.Controls
             {
                 rv = getGenericTextBox(property, binding);
             }
+            else if (property.PropertyType == typeof(PluginSettingStore))
+            {
+                var bindingDisplay = new BindingDisplay();
+                bindingDisplay.StoreBinding.Bind(binding.Convert<PluginSettingStore?>(property));
+                rv = bindingDisplay;
+            }
 
             if (rv == null)
                 throw new NotSupportedException($"'{property.PropertyType}' is not supported for generated controls.");
