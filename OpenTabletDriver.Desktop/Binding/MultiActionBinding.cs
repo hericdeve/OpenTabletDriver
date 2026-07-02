@@ -1,3 +1,4 @@
+using OpenTabletDriver.Plugin.Platform.Pointer;
 using System;
 using System.Linq;
 using System.Threading;
@@ -49,7 +50,15 @@ namespace OpenTabletDriver.Desktop.Binding
         // ── Dependency injection ─────────────────────────────────────────────────
 
         [Resolved]
-        public IServiceManager? ServiceManager { set; get; }
+        public IMouseButtonHandler? MouseButtonHandler { set; get; }
+
+        [Resolved]
+        public IMouseScrollHandler? MouseScrollHandler { set; get; }
+
+        [Resolved]
+        public IPenActionHandler? PenActionHandler { set; get; }
+
+        [Resolved]
 
         [TabletReference]
         public TabletReference? Tablet { set; get; }
@@ -57,9 +66,15 @@ namespace OpenTabletDriver.Desktop.Binding
         [OnDependencyLoad]
         public void OnDependencyLoad()
         {
-            _tapBinding = TapAction?.Construct<IBinding>(ServiceManager, Tablet);
-            _doubleClickBinding = DoubleClickAction?.Construct<IBinding>(ServiceManager, Tablet);
-            _holdBinding = HoldAction?.Construct<IBinding>(ServiceManager, Tablet);
+            var sm = new ServiceManager();
+            if (MouseButtonHandler != null) sm.AddService(() => MouseButtonHandler);
+            if (MouseScrollHandler != null) sm.AddService(() => MouseScrollHandler);
+            if (PenActionHandler != null) sm.AddService(() => PenActionHandler);
+
+
+            _tapBinding = TapAction?.Construct<IBinding>(sm, Tablet);
+            _doubleClickBinding = DoubleClickAction?.Construct<IBinding>(sm, Tablet);
+            _holdBinding = HoldAction?.Construct<IBinding>(sm, Tablet);
         }
 
         // ── Properties ───────────────────────────────────────────────────────────

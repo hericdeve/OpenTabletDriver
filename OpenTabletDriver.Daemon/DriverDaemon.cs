@@ -290,8 +290,9 @@ namespace OpenTabletDriver.Daemon
                 lastValidSettings = settings;
                 return Task.CompletedTask;
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Write("Settings", $"Exception in SetSettings: {ex}", LogLevel.Error);
                 try
                 {
                     SetSettings(lastValidSettings);
