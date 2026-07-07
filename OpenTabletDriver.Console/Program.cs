@@ -103,6 +103,8 @@ namespace OpenTabletDriver.Console
             CreateCommand<string>(SetDefaultAppRule, "Sets the default preset for unmapped applications", "set-default-app-rule"),
             CreateCommand<string>(SetDefaultAppMode, "Sets the default output mode for unmapped applications", "set-default-app-mode"),
             CreateCommand<bool>(SetEnableAppProfiler, "Enables or disables application profiling", "set-enable-app-profiler"),
+            CreateCommand<string, string>(CycleHyprlandMonitor, "Cycle tablet mapping between Hyprland monitors", "hyprland-monitor-cycle"),
+            CreateCommand<string>(SyncHyprlandFocus, "Map tablet to the monitor where the focused window is located in Hyprland", "sync-focus"),
         ];
 
         private static readonly IEnumerable<Command> RequestCommands =

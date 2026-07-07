@@ -299,10 +299,14 @@ namespace OpenTabletDriver.UX
             setDefaultAppMode.Executed += async (sender, e) => await SetDefaultAppModeDialog();
 
             var toggleAppPresets = new CheckCommand { MenuText = "Enable app profiling" };
+            var toggleSyncFocus = new CheckCommand { MenuText = "Sync focus on window change" };
             App.Current.PropertyChanged += (sender, e) =>
             {
                 if (e.PropertyName == nameof(App.AppProfilerSettings) && App.Current.AppProfilerSettings != null)
+                {
                     toggleAppPresets.Checked = App.Current.AppProfilerSettings.EnableAppProfiler;
+                    toggleSyncFocus.Checked = App.Current.AppProfilerSettings.SyncFocus;
+                }
             };
             toggleAppPresets.Executed += async (sender, e) =>
             {
@@ -312,8 +316,19 @@ namespace OpenTabletDriver.UX
                     await App.Driver.Instance.SetAppProfilerSettings(appSettings);
                 }
             };
+            toggleSyncFocus.Executed += async (sender, e) =>
+            {
+                if (App.Current.AppProfilerSettings is AppProfilerSettings appSettings)
+                {
+                    appSettings.SyncFocus = toggleSyncFocus.Checked;
+                    await App.Driver.Instance.SetAppProfilerSettings(appSettings);
+                }
+            };
             if (App.Current.AppProfilerSettings != null)
+            {
                 toggleAppPresets.Checked = App.Current.AppProfilerSettings.EnableAppProfiler;
+                toggleSyncFocus.Checked = App.Current.AppProfilerSettings.SyncFocus;
+            }
 
             var detectTablet = new Command { MenuText = "Detect tablet", Shortcut = Application.Instance.CommonModifier | Keys.D };
             detectTablet.Executed += async (sender, e) => await DetectTablet();
@@ -365,6 +380,7 @@ namespace OpenTabletDriver.UX
                             setDefaultAppPreset,
                             setDefaultAppMode,
                             toggleAppPresets,
+                            toggleSyncFocus,
                             new ButtonMenuItem
                             {
                                 Text = "Presets",

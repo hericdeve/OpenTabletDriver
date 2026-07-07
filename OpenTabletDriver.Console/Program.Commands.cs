@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using OpenTabletDriver.Desktop;
 using OpenTabletDriver.Desktop.Interop;
+using OpenTabletDriver.Desktop.Interop.Display;
 using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Output;
@@ -340,6 +341,49 @@ namespace OpenTabletDriver.Console
             }
 
             await SetDisplayArea(tablet, width, height, x, y);
+        }
+
+        private static async Task CycleHyprlandMonitor(string tablet, string direction = "Next")
+        {
+            var monitors = HyprlandDisplayInterop.GetMonitors(DesktopInterop.VirtualScreen);
+            if (monitors.Length == 0)
+            {
+                await Out.WriteLineAsync("No monitors were found to cycle through.");
+                return;
+            }
+
+            var settings = await Driver.Instance.GetSettings();
+            var profile = settings.Profiles.FirstOrDefault(p => string.Equals(p.Tablet, tablet, StringComparison.OrdinalIgnoreCase));
+            
+            if (profile == null)
+            {
+                await Out.WriteLineAsync($"Tablet '{tablet}' not found.");
+                return;
+            }
+
+            var display = profile.AbsoluteModeSettings.Display;
+            var currentIndex = HyprlandDisplayInterop.FindCurrentMonitorIndex(monitors, display);
+            
+            var isNext = string.Equals(direction, "Next", StringComparison.OrdinalIgnoreCase);
+            var offset = isNext ? 1 : -1;
+            var nextIndex = (currentIndex + offset + monitors.Length) % monitors.Length;
+            var nextMonitor = monitors[nextIndex];
+
+            await SetDisplayArea(tablet, nextMonitor.Width, nextMonitor.Height, nextMonitor.Center.X, nextMonitor.Center.Y);
+            await Out.WriteLineAsync($"Cycled '{tablet}' to monitor {nextMonitor.Name}.");
+        }
+
+        private static async Task SyncHyprlandFocus(string tablet)
+        {
+            var activeMonitor = HyprlandDisplayInterop.GetActiveMonitor(DesktopInterop.VirtualScreen);
+            if (activeMonitor == null)
+            {
+                await Out.WriteLineAsync("Unable to detect active window monitor.");
+                return;
+            }
+
+            await SetDisplayArea(tablet, activeMonitor.Width, activeMonitor.Height, activeMonitor.Center.X, activeMonitor.Center.Y);
+            await Out.WriteLineAsync($"Synced '{tablet}' to monitor {activeMonitor.Name}.");
         }
 
         private static async Task SetTabletArea(string tablet, float width, float height, float x, float y, float rotation = 0)

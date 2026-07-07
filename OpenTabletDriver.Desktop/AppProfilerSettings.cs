@@ -11,6 +11,9 @@ namespace OpenTabletDriver.Desktop
         [JsonProperty("enableAppProfiler")]
         public bool EnableAppProfiler { get; set; } = false;
 
+        [JsonProperty("syncFocus")]
+        public bool SyncFocus { get; set; } = false;
+
         [JsonProperty("defaultAppProfile")]
         public string? DefaultAppProfile { get; set; }
 

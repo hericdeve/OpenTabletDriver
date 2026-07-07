@@ -153,59 +153,96 @@ namespace OpenTabletDriver.Daemon
 
             bool presetChanged = targetPreset != _currentPreset;
             bool outputModeChanged = targetOutputMode != _currentOutputMode;
+            bool syncFocusChangedSettings = false;
 
-            if (presetChanged || outputModeChanged)
+            Settings appliedSettings;
+
+            if (presetChanged && targetPreset != null)
             {
-                Settings appliedSettings;
-
-                if (presetChanged && targetPreset != null)
+                presetManager.Refresh();
+                var preset = presetManager.FindPreset(targetPreset);
+                if (preset != null)
                 {
-                    presetManager.Refresh();
-                    var preset = presetManager.FindPreset(targetPreset);
-                    if (preset != null)
-                    {
-                        Log.Write("AppProfileMonitor", $"Applying preset '{preset.Name}' for application '{windowClass}'.", LogLevel.Info);
-                        Console.WriteLine($"[AppProfiler] Switching to preset '{preset.Name}' for application '{windowClass}'");
+                    Log.Write("AppProfileMonitor", $"Applying preset '{preset.Name}' for application '{windowClass}'.", LogLevel.Info);
+                    Console.WriteLine($"[AppProfiler] Switching to preset '{preset.Name}' for application '{windowClass}'");
 
-                        appliedSettings = preset.Settings.Clone();
-                        _currentPreset = targetPreset;
-                    }
-                    else
-                    {
-                        Log.Write("AppProfileMonitor", $"Preset '{targetPreset}' not found.", LogLevel.Error);
-                        appliedSettings = settings.Clone();
-                    }
+                    appliedSettings = preset.Settings.Clone();
+                    _currentPreset = targetPreset;
                 }
                 else
                 {
+                    Log.Write("AppProfileMonitor", $"Preset '{targetPreset}' not found.", LogLevel.Error);
                     appliedSettings = settings.Clone();
                 }
+            }
+            else
+            {
+                appliedSettings = settings.Clone();
+            }
 
-                if (presetChanged)
-                {
-                    PreserveDisplaySettings(appliedSettings, settings);
-                }
+            if (presetChanged)
+            {
+                PreserveDisplaySettings(appliedSettings, settings);
+            }
 
-                if (targetOutputMode != null && (outputModeChanged || presetChanged))
+            if (appSettings.SyncFocus && _activeProvider is HyprlandWindowProvider)
+            {
+                var activeMonitor = OpenTabletDriver.Desktop.Interop.Display.HyprlandDisplayInterop.GetActiveMonitor(null);
+                if (activeMonitor != null)
                 {
-                    var newOutputModeStore = PluginSettingStore.FromPath(targetOutputMode);
-                    if (newOutputModeStore != null)
+                    var targetDisplay = OpenTabletDriver.Desktop.Interop.Display.HyprlandDisplayInterop.ToAreaSettings(activeMonitor);
+                    foreach (var profile in appliedSettings.Profiles)
                     {
-                        Log.Write("AppProfileMonitor", $"Applying output mode '{targetOutputMode}' for application '{windowClass}'.", LogLevel.Info);
-                        Console.WriteLine($"[AppProfiler] Switching to output mode '{targetOutputMode}' for application '{windowClass}'");
-
-                        foreach (var profile in appliedSettings.Profiles)
+                        if (profile.AbsoluteModeSettings != null)
                         {
-                            profile.OutputMode = newOutputModeStore;
+                            var currentDisplay = profile.AbsoluteModeSettings.Display;
+                            if (currentDisplay.Width != targetDisplay.Width ||
+                                currentDisplay.Height != targetDisplay.Height ||
+                                currentDisplay.X != targetDisplay.X ||
+                                currentDisplay.Y != targetDisplay.Y)
+                            {
+                                profile.AbsoluteModeSettings.Display = new AreaSettings
+                                {
+                                    Width = targetDisplay.Width,
+                                    Height = targetDisplay.Height,
+                                    X = targetDisplay.X,
+                                    Y = targetDisplay.Y,
+                                    Rotation = targetDisplay.Rotation
+                                };
+                                syncFocusChangedSettings = true;
+                            }
                         }
-                        _currentOutputMode = targetOutputMode;
                     }
-                    else
+
+                    if (syncFocusChangedSettings)
                     {
-                        Log.Write("AppProfileMonitor", $"Output mode '{targetOutputMode}' not found.", LogLevel.Error);
+                        Log.Write("AppProfileMonitor", $"Syncing focus to monitor at ({targetDisplay.X}, {targetDisplay.Y}) for application '{windowClass}'.", LogLevel.Info);
                     }
                 }
+            }
 
+            if (targetOutputMode != null && (outputModeChanged || presetChanged))
+            {
+                var newOutputModeStore = PluginSettingStore.FromPath(targetOutputMode);
+                if (newOutputModeStore != null)
+                {
+                    Log.Write("AppProfileMonitor", $"Applying output mode '{targetOutputMode}' for application '{windowClass}'.", LogLevel.Info);
+                    Console.WriteLine($"[AppProfiler] Switching to output mode '{targetOutputMode}' for application '{windowClass}'");
+
+                    foreach (var profile in appliedSettings.Profiles)
+                    {
+                        profile.OutputMode = newOutputModeStore;
+                    }
+                    _currentOutputMode = targetOutputMode;
+                }
+                else
+                {
+                    Log.Write("AppProfileMonitor", $"Output mode '{targetOutputMode}' not found.", LogLevel.Error);
+                }
+            }
+
+            if (presetChanged || outputModeChanged || syncFocusChangedSettings)
+            {
                 _ = _daemon.SetSettings(appliedSettings);
             }
         }
