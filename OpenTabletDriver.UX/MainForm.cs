@@ -306,6 +306,7 @@ namespace OpenTabletDriver.UX
                 {
                     toggleAppPresets.Checked = App.Current.AppProfilerSettings.EnableAppProfiler;
                     toggleSyncFocus.Checked = App.Current.AppProfilerSettings.SyncFocus;
+                    toggleSyncFocus.Enabled = toggleAppPresets.Checked;
                 }
             };
             toggleAppPresets.Executed += async (sender, e) =>
@@ -313,6 +314,7 @@ namespace OpenTabletDriver.UX
                 if (App.Current.AppProfilerSettings is AppProfilerSettings appSettings)
                 {
                     appSettings.EnableAppProfiler = toggleAppPresets.Checked;
+                    toggleSyncFocus.Enabled = toggleAppPresets.Checked;
                     await App.Driver.Instance.SetAppProfilerSettings(appSettings);
                 }
             };
@@ -328,6 +330,7 @@ namespace OpenTabletDriver.UX
             {
                 toggleAppPresets.Checked = App.Current.AppProfilerSettings.EnableAppProfiler;
                 toggleSyncFocus.Checked = App.Current.AppProfilerSettings.SyncFocus;
+                toggleSyncFocus.Enabled = toggleAppPresets.Checked;
             }
 
             var detectTablet = new Command { MenuText = "Detect tablet", Shortcut = Application.Instance.CommonModifier | Keys.D };
