@@ -96,7 +96,11 @@ namespace OpenTabletDriver.Tests.ConfigurationTest
             string? aHidReports = null;
             string? bHidReports = null;
             bool aHas = a.Attributes?.TryGetValue("HID_REPORTS", out aHidReports) ?? false;
+            if (!aHas) aHas = a.Attributes?.TryGetValue("HidReports", out aHidReports) ?? false;
+            
             bool bHas = b.Attributes?.TryGetValue("HID_REPORTS", out bHidReports) ?? false;
+            if (!bHas) bHas = b.Attributes?.TryGetValue("HidReports", out bHidReports) ?? false;
+            
             if (aHas || bHas)
             {
                 aHidReports ??= string.Empty;

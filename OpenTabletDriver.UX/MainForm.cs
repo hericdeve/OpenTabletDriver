@@ -332,9 +332,15 @@ namespace OpenTabletDriver.UX
                 toggleSyncFocus.Checked = App.Current.AppProfilerSettings.SyncFocus;
                 toggleSyncFocus.Enabled = toggleAppPresets.Checked;
             }
+            var openPresetsDirectory = new Command { MenuText = "Open presets directory..." };
+            openPresetsDirectory.Executed += async (sender, e) => DesktopInterop.OpenFolder(AppInfo.Current.PresetDirectory);
 
             var detectTablet = new Command { MenuText = "Detect tablet", Shortcut = Application.Instance.CommonModifier | Keys.D };
-            detectTablet.Executed += async (sender, e) => await DetectTablet();
+            detectTablet.Executed += async (sender, e) =>
+            {
+                AppInfo.Current.ConfigurationDirectory = null; // force recheck on next access
+                await DetectTablet();
+            };
 
             var showTabletDebugger = new Command { MenuText = "Tablet debugger..." };
             showTabletDebugger.Executed += (sender, e) => App.Current.DebuggerWindow.Show();
@@ -376,7 +382,6 @@ namespace OpenTabletDriver.UX
                             resetSettings,
                             applySettings,
                             new SeparatorMenuItem(),
-                            refreshPresets,
                             savePreset,
                             saveAppPreset,
                             saveAppMode,
@@ -384,6 +389,8 @@ namespace OpenTabletDriver.UX
                             setDefaultAppMode,
                             toggleAppPresets,
                             toggleSyncFocus,
+                            refreshPresets,
+                            openPresetsDirectory,
                             new ButtonMenuItem
                             {
                                 Text = "Presets",
@@ -614,7 +621,7 @@ namespace OpenTabletDriver.UX
         private static async Task ResetSettings()
         {
             await App.Driver.Instance.ResetSettings();
-            App.Current.Settings = await App.Driver.Instance.GetSettings();
+            await SyncSettings();
         }
 
         private static async Task ResetSettingsDialog()

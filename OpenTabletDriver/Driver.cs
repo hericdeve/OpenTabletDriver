@@ -280,8 +280,8 @@ namespace OpenTabletDriver
                 {
                     var deviceAttributes = device.DeviceAttributes;
                     if (deviceAttributes == null ||
-                        !deviceAttributes.TryGetValue("HID_REPORTS", out var hidReports) ||
-                        !Regex.IsMatch(hidReports, hidReportsPattern))
+                        !deviceAttributes.TryGetValue("HID_REPORTS", out var forkHidReports) ||
+                        !Regex.IsMatch(forkHidReports, hidReportsPattern))
                     {
                         return false;
                     }
@@ -304,6 +304,13 @@ namespace OpenTabletDriver
                     // If it isn't a match there is no point proceeding.
                     return false;
                 }
+            }
+
+            if (attributes.TryGetValue("HidReports", out var hidReports)
+                && device.DeviceAttributes.TryGetValue("HID_REPORTS", out var usbHidReports)
+                && !Regex.IsMatch(usbHidReports, hidReports))
+            {
+                return false; // HidReports specified and no HID Reports match.
             }
 
             if (!attributes.TryGetValue("Interface", out var identifierInterface))

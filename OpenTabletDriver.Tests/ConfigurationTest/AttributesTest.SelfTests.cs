@@ -105,6 +105,7 @@ namespace OpenTabletDriver.Tests.ConfigurationTest
                 yield return new("FeatureInitDelayMs", ConfigurationAttributes.CheckFeatureInitDelayMs);
                 yield return new("WinUsage", ConfigurationAttributes.CheckWinUsage);
                 yield return new("HID_REPORTS", val => !string.IsNullOrEmpty(val));
+                yield return new("HidReports", ConfigurationAttributes.CheckHidReports);
             }
         }
 

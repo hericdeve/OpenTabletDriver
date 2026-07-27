@@ -1,5 +1,3 @@
-#nullable enable
-
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -251,7 +249,7 @@ public sealed class TabletDebuggerViewModel : ViewModel, IDisposable
                 ResetStatistics();
 
                 string fileName = "tablet-data_" + DateTimeOffset.UtcNow.ToUnixTimeSeconds() + ".txt";
-                _tabletRecordingFileStream = File.OpenWrite(Path.Join(AppInfo.Current.AppDataDirectory, fileName));
+                _tabletRecordingFileStream = File.OpenWrite(Path.Join(AppInfo.Current.RecordingDirectory, fileName));
                 _tabletRecordingStreamWriter = new StreamWriter(_tabletRecordingFileStream);
             }
             else
@@ -266,7 +264,7 @@ public sealed class TabletDebuggerViewModel : ViewModel, IDisposable
         set => RaiseAndSetIfChanged(ref _isVisualizerEnabled, value);
     }
 
-    private bool _showAdditionalStatistics;
+    private bool _showAdditionalStatistics = true;
     public bool ShowAdditionalStatistics
     {
         get => _showAdditionalStatistics;

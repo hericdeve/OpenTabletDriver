@@ -417,7 +417,7 @@ namespace OpenTabletDriver.Console
         {
             await ModifyProfile(tablet, p =>
             {
-                var tipBinding = AppInfo.PluginManager.ConstructObject<IBinding>(name);
+                var tipBinding = AppInfo.PluginManager.ConstructObject<IBinding>(name) ?? throw new InvalidOperationException($"Could not construct binding with name {name}");
 
                 p.BindingSettings.TipButton = new PluginSettingStore(tipBinding);
                 p.BindingSettings.TipActivationThreshold = threshold;
@@ -428,7 +428,7 @@ namespace OpenTabletDriver.Console
         {
             await ModifyProfile(tablet, p =>
             {
-                var binding = AppInfo.PluginManager.ConstructObject<IBinding>(name);
+                var binding = AppInfo.PluginManager.ConstructObject<IBinding>(name) ?? throw new InvalidOperationException($"Could not construct binding with name {name}");
 
                 p.BindingSettings.PenButtons[index] = new PluginSettingStore(binding);
             });
@@ -438,7 +438,7 @@ namespace OpenTabletDriver.Console
         {
             await ModifyProfile(tablet, p =>
             {
-                var binding = AppInfo.PluginManager.ConstructObject<IBinding>(name);
+                var binding = AppInfo.PluginManager.ConstructObject<IBinding>(name) ?? throw new InvalidOperationException($"Could not construct binding with name {name}");
 
                 p.BindingSettings.AuxButtons[index] = new PluginSettingStore(binding);
             });
