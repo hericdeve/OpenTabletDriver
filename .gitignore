@@ -36,3 +36,6 @@ eng/bash/Arch/opentabletdriver.install
 eng/bash/Arch/package.sh
 generate-rules.sh
 diffs/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
