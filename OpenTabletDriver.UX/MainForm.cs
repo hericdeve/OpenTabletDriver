@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
@@ -534,6 +535,9 @@ namespace OpenTabletDriver.UX
                 // Update title to new instance
                 if (await daemon.GetTablets() is IEnumerable<TabletReference> tablets)
                     SetTitle(tablets);
+
+                // Having a mismatch between the version of the daemon and the application will cause issues
+                MatchDaemonVersion();
             }
             catch (Exception ex) when (IsExpectedRpcDisconnect(ex))
             {
@@ -1085,6 +1089,26 @@ namespace OpenTabletDriver.UX
             {
                 Log.Exception(ex);
                 ex.ShowMessageBox();
+            }
+        }
+        private static void MatchDaemonVersion()
+        {
+            Debug.Assert(App.Driver.IsConnected, "It should not be possible to fetch the daemon version without a connected daemon");
+
+            var daemonVersionString = AppInfo.Current.Version?.ToString() ?? "Outdated";
+            var versionMatch = AppInfo.Current.Version != null && AppInfo.Current.Version == App.AssemblyVersion;
+
+            if (versionMatch == false)
+            {
+                var specificsTip = "You may need to restart the daemon.";
+
+                if (App.DaemonWatchdog != null || App.AssemblyVersion < AppInfo.Current.Version)
+                    specificsTip = "You may need to restart the UX.";
+                else if (OperatingSystem.IsLinux())
+                    specificsTip = "You may need to restart the user service or edit symlinks.";
+
+                Log.WriteNotify("UX", $"Daemon version ({daemonVersionString}) does not match the UX version ({App.AssemblyVersion})." +
+                                        Environment.NewLine + specificsTip, LogLevel.Warning);
             }
         }
         private static void CheckForUpdates()

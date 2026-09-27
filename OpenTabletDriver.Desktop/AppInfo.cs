@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Reflection;
 using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.Interop;
 using OpenTabletDriver.Plugin;
@@ -12,6 +13,15 @@ namespace OpenTabletDriver.Desktop
 
     public class AppInfo
     {
+        /// <summary>
+        ///   The version of the currently executing assembly
+        /// </summary>
+        /// <remarks>
+        ///   This value is set at compile time, it will differ depending on whether the Daemon, the UX or some other code is using this field.
+        ///   You should rely on <see cref="Version"/> instead.
+        /// </remarks>
+        private readonly static Version assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version!;
+
         private string? configurationDirectory,
             settingsFile,
             appProfilesFile,
@@ -44,7 +54,7 @@ namespace OpenTabletDriver.Desktop
             {
                 PluginPlatform.Windows => new AppInfo
                 {
-                    AppDataDirectory = GetExistingPathOrLast(Path.Join(ProgramDirectory, "userdata"), "$LOCALAPPDATA\\OpenTabletDriver")
+                    AppDataDirectory = GetExistingPathOrLast(Path.Join(ProgramDirectory, "userdata"), "$LOCALAPPDATA\\OpenTabletDriver"),
                 },
                 PluginPlatform.Linux => new AppInfo
                 {
@@ -66,6 +76,8 @@ namespace OpenTabletDriver.Desktop
 
         public static PresetManager PresetManager { set; get; } = new PresetManager();
 
+        public Version Version { set; get; } = assemblyVersion;
+
         public string? CommandLineAppDataDirectory
         {
             set
@@ -76,6 +88,7 @@ namespace OpenTabletDriver.Desktop
             }
             get;
         }
+
         public string? CommandLineConfigurationDirectory
         {
             set
