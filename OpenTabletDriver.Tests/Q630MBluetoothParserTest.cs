@@ -233,5 +233,43 @@ namespace OpenTabletDriver.Tests
             Assert.Equal(expectedPressed, report.WheelButtons[0][0]);
             Assert.False(report.WheelButtons[1][0]);
         }
+
+        [Fact]
+        public void SharedDialParser_ReboundWithinThreshold_IsSuppressed()
+        {
+            long mockTimeMs = 5000;
+            var debouncer = new Q630MWheelDebouncer(() => mockTimeMs);
+            var parser = new Q630MBluetoothSharedDialReportParser(debouncer);
+
+            // Step 1: Forward rotation (+1) at t=5000ms
+            byte[] packetForward = [0x03, 0xF1, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+            var r1 = Assert.IsType<Q630MBluetoothSharedDialReport>(parser.Parse(packetForward));
+            Assert.Equal(1, r1.AnalogDeltas[0]);
+
+            // Step 2: Immediate rebound backward (-1) at t=5030ms (< 100ms rebound window)
+            mockTimeMs = 5030;
+            byte[] packetBackward = [0x03, 0xF1, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00];
+            var r2 = Assert.IsType<Q630MBluetoothSharedDialReport>(parser.Parse(packetBackward));
+            Assert.Equal(0, r2.AnalogDeltas[0]); // Suppressed!
+
+            // Step 3: Backward rotation after rebound window (t=5150ms >= 5000+100ms)
+            mockTimeMs = 5150;
+            var r3 = Assert.IsType<Q630MBluetoothSharedDialReport>(parser.Parse((byte[])packetBackward.Clone()));
+            Assert.Equal(-1, r3.AnalogDeltas[0]); // Allowed!
+        }
+
+        [Fact]
+        public void SharedDialParser_DuplicateDataReference_ReturnsCachedReport()
+        {
+            long mockTimeMs = 6000;
+            var debouncer = new Q630MWheelDebouncer(() => mockTimeMs);
+            var parser = new Q630MBluetoothSharedDialReportParser(debouncer);
+
+            byte[] packet = [0x03, 0xF1, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+            var report1 = parser.Parse(packet);
+            var report2 = parser.Parse(packet);
+
+            Assert.Same(report1, report2);
+        }
     }
 }

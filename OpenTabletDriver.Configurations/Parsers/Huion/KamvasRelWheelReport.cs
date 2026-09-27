@@ -14,7 +14,19 @@ public struct KamvasRelWheelReport : IRelativeWheelReport
         ];
     }
 
-    private static int GetWheelDelta(byte wheelData) =>
+    public KamvasRelWheelReport(byte[] data, int[] analogDeltas)
+    {
+        Raw = data;
+        AnalogDeltas = analogDeltas;
+    }
+
+    public KamvasRelWheelReport(byte[] data, int wheel1Delta, int wheel2Delta)
+    {
+        Raw = data;
+        AnalogDeltas = [wheel1Delta, wheel2Delta];
+    }
+
+    public static int GetWheelDelta(byte wheelData) =>
         wheelData switch
         {
             0x1 => 1,

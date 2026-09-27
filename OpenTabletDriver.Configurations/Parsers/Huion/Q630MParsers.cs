@@ -3,6 +3,7 @@ using OpenTabletDriver.Plugin.Tablet.Wheel;
 using OpenTabletDriver.Plugin.Tablet;
 using OpenTabletDriver.Plugin;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System;
 using System.Numerics;
@@ -10,7 +11,86 @@ using System.Runtime.CompilerServices;
 
 namespace OpenTabletDriver.Configurations.Parsers.Huion
 {
-public struct Q630MAuxReport : IAuxReport, IWheelButtonReport
+    public class Q630MWheelDebouncer
+    {
+        private readonly Func<double> _timeProvider;
+        public double MinStepIntervalMs { get; }
+        public double ReverseLockoutMs { get; }
+        public double IdleResetMs { get; }
+
+        private readonly double[] _lastEmitTime = [-1e9, -1e9];
+        private readonly int[] _lastDirection = [0, 0];
+
+        public Q630MWheelDebouncer(
+            Func<double>? timeProvider = null,
+            double minStepIntervalMs = 20.0,
+            double reverseLockoutMs = 120.0,
+            double idleResetMs = 200.0)
+        {
+            _timeProvider = timeProvider ?? GetDefaultTimestampMs;
+            MinStepIntervalMs = minStepIntervalMs;
+            ReverseLockoutMs = reverseLockoutMs;
+            IdleResetMs = idleResetMs;
+        }
+
+        private static double GetDefaultTimestampMs() =>
+            Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
+
+        public int FilterDelta(int wheelIndex, int rawDelta)
+        {
+            if (rawDelta == 0 || wheelIndex < 0 || wheelIndex >= _lastEmitTime.Length)
+                return 0;
+
+            double currentTime = _timeProvider();
+            int direction = Math.Sign(rawDelta);
+            double lastTime = _lastEmitTime[wheelIndex];
+            int lastDir = _lastDirection[wheelIndex];
+            double elapsed = currentTime - lastTime;
+
+            // If wheel was idle or has not been moved yet, accept the pulse immediately (0ms latency).
+            if (elapsed >= IdleResetMs || lastDir == 0)
+            {
+                _lastEmitTime[wheelIndex] = currentTime;
+                _lastDirection[wheelIndex] = direction;
+                return direction;
+            }
+
+            // If pulse is in the same direction, enforce minimum detent interval
+            // to filter contact chatter pulses from a single physical click.
+            if (direction == lastDir)
+            {
+                if (elapsed >= MinStepIntervalMs)
+                {
+                    _lastEmitTime[wheelIndex] = currentTime;
+                    return direction;
+                }
+
+                return 0;
+            }
+
+            // If pulse is in opposite direction, enforce reverse lockout
+            // to filter opposing bounce pulses while actively rotating.
+            if (elapsed >= ReverseLockoutMs)
+            {
+                _lastEmitTime[wheelIndex] = currentTime;
+                _lastDirection[wheelIndex] = direction;
+                return direction;
+            }
+
+            return 0;
+        }
+
+        public void Reset()
+        {
+            for (int i = 0; i < _lastEmitTime.Length; i++)
+            {
+                _lastEmitTime[i] = -1e9;
+                _lastDirection[i] = 0;
+            }
+        }
+    }
+
+    public struct Q630MAuxReport : IAuxReport, IWheelButtonReport
     {
         public Q630MAuxReport(byte[] report)
         {
@@ -39,9 +119,24 @@ public struct Q630MAuxReport : IAuxReport, IWheelButtonReport
         public bool[][] WheelButtons { set; get; }
         public byte[] Raw { set; get; }
     }
-[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     public class Q630MAuxReportParser : IReportParser<IDeviceReport>
     {
+        private readonly Q630MWheelDebouncer _debouncer;
+        private byte[]? _lastData;
+        private IDeviceReport? _lastReport;
+
+        public Q630MAuxReportParser() : this(new Q630MWheelDebouncer())
+        {
+        }
+
+        public Q630MAuxReportParser(Q630MWheelDebouncer debouncer)
+        {
+            _debouncer = debouncer;
+        }
+
+        public Q630MWheelDebouncer Debouncer => _debouncer;
+
         private readonly Dictionary<ulong, int> _shortcutButtonSlots = new()
         {
             { 0x0005, 0 },
@@ -69,6 +164,19 @@ public struct Q630MAuxReport : IAuxReport, IWheelButtonReport
         private const int ButtonSlotCount = 8;
 
         public IDeviceReport Parse(byte[] data)
+        {
+            if (ReferenceEquals(data, _lastData) && _lastReport != null)
+            {
+                return _lastReport;
+            }
+
+            var report = ParseInternal(data);
+            _lastData = data;
+            _lastReport = report;
+            return report;
+        }
+
+        private IDeviceReport ParseInternal(byte[] data)
         {
             if (data.Length < 2)
             {
@@ -105,7 +213,9 @@ public struct Q630MAuxReport : IAuxReport, IWheelButtonReport
                     return new DeviceReport(data);
                 }
 
-                return new KamvasRelWheelReport(data);
+                int w1 = _debouncer.FilterDelta(0, data[3] == 1 ? KamvasRelWheelReport.GetWheelDelta(data[5]) : 0);
+                int w2 = _debouncer.FilterDelta(1, data[3] == 2 ? KamvasRelWheelReport.GetWheelDelta(data[5]) : 0);
+                return new KamvasRelWheelReport(data, w1, w2);
             }
 
             if (data[1] != 0xE0 && !(data[1].IsBitSet(5) && data[1].IsBitSet(6)))
@@ -229,9 +339,24 @@ public struct Q630MBluetoothTabletReport : ITabletReport
             ];
         }
     }
-[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     public class Q630MBluetoothPenReportParser : IReportParser<IDeviceReport>
     {
+        private readonly Q630MWheelDebouncer _debouncer;
+        private byte[]? _lastData;
+        private IDeviceReport? _lastReport;
+
+        public Q630MBluetoothPenReportParser() : this(new Q630MWheelDebouncer())
+        {
+        }
+
+        public Q630MBluetoothPenReportParser(Q630MWheelDebouncer debouncer)
+        {
+            _debouncer = debouncer;
+        }
+
+        public Q630MWheelDebouncer Debouncer => _debouncer;
+
         private readonly Dictionary<ulong, int> _shortcutButtonSlots = new()
         {
             { 0x0005, 0 },
@@ -263,6 +388,19 @@ public struct Q630MBluetoothTabletReport : ITabletReport
         private int _consecutiveZeroPressurePackets;
 
         public IDeviceReport Parse(byte[] data)
+        {
+            if (ReferenceEquals(data, _lastData) && _lastReport != null)
+            {
+                return _lastReport;
+            }
+
+            var report = ParseInternal(data);
+            _lastData = data;
+            _lastReport = report;
+            return report;
+        }
+
+        private IDeviceReport ParseInternal(byte[] data)
         {
             if (data.Length < 2)
             {
@@ -300,7 +438,9 @@ public struct Q630MBluetoothTabletReport : ITabletReport
                     return new DeviceReport(data);
                 }
 
-                return new KamvasRelWheelReport(data);
+                int w1 = _debouncer.FilterDelta(0, data[3] == 1 ? KamvasRelWheelReport.GetWheelDelta(data[5]) : 0);
+                int w2 = _debouncer.FilterDelta(1, data[3] == 2 ? KamvasRelWheelReport.GetWheelDelta(data[5]) : 0);
+                return new KamvasRelWheelReport(data, w1, w2);
             }
 
             // Some firmware variants reuse the pen endpoint for shortcut packets, but
@@ -462,16 +602,47 @@ public struct Q630MBluetoothSharedDialReport : IRelativeWheelReport, IWheelButto
 [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     public class Q630MBluetoothSharedDialReportParser : IReportParser<IDeviceReport>
     {
+        private readonly Q630MWheelDebouncer _debouncer;
+        private byte[]? _lastData;
+        private IDeviceReport? _lastReport;
+
+        public Q630MBluetoothSharedDialReportParser() : this(new Q630MWheelDebouncer())
+        {
+        }
+
+        public Q630MBluetoothSharedDialReportParser(Q630MWheelDebouncer debouncer)
+        {
+            _debouncer = debouncer;
+        }
+
+        public Q630MWheelDebouncer Debouncer => _debouncer;
+
         public IDeviceReport Parse(byte[] data)
+        {
+            if (ReferenceEquals(data, _lastData) && _lastReport != null)
+            {
+                return _lastReport;
+            }
+
+            var report = ParseInternal(data);
+            _lastData = data;
+            _lastReport = report;
+            return report;
+        }
+
+        private IDeviceReport ParseInternal(byte[] data)
         {
             if (data.Length < 5 || data[1] != 0xF1)
             {
                 return new DeviceReport(data);
             }
 
+            int rawDelta = GetWheel1Delta(data);
+            int debouncedDelta = _debouncer.FilterDelta(0, rawDelta);
+
             return new Q630MBluetoothSharedDialReport(
                 data,
-                GetWheel1Delta(data),
+                debouncedDelta,
                 IsWheel1ButtonPressed(data));
         }
 
@@ -495,7 +666,35 @@ public struct Q630MBluetoothSharedDialReport : IRelativeWheelReport, IWheelButto
 [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     public class Q630MReportParser : IReportParser<IDeviceReport>
     {
+        private readonly Q630MWheelDebouncer _debouncer;
+        private byte[]? _lastData;
+        private IDeviceReport? _lastReport;
+
+        public Q630MReportParser() : this(new Q630MWheelDebouncer())
+        {
+        }
+
+        public Q630MReportParser(Q630MWheelDebouncer debouncer)
+        {
+            _debouncer = debouncer;
+        }
+
+        public Q630MWheelDebouncer Debouncer => _debouncer;
+
         public IDeviceReport Parse(byte[] data)
+        {
+            if (ReferenceEquals(data, _lastData) && _lastReport != null)
+            {
+                return _lastReport;
+            }
+
+            var report = ParseInternal(data);
+            _lastData = data;
+            _lastReport = report;
+            return report;
+        }
+
+        private IDeviceReport ParseInternal(byte[] data)
         {
             if (data.Length < 2)
                 return new DeviceReport(data);
@@ -503,7 +702,11 @@ public struct Q630MBluetoothSharedDialReport : IRelativeWheelReport, IWheelButto
             if (data[1] == 0xF1)
             {
                 if (data.Length >= 6)
-                    return new KamvasRelWheelReport(data);
+                {
+                    int w1 = _debouncer.FilterDelta(0, data[3] == 1 ? KamvasRelWheelReport.GetWheelDelta(data[5]) : 0);
+                    int w2 = _debouncer.FilterDelta(1, data[3] == 2 ? KamvasRelWheelReport.GetWheelDelta(data[5]) : 0);
+                    return new KamvasRelWheelReport(data, w1, w2);
+                }
 
                 return new DeviceReport(data);
             }
