@@ -1,4 +1,5 @@
 using System;
+using OpenTabletDriver.UX.Gtk.Hud;
 
 namespace OpenTabletDriver.UX.Gtk
 {
@@ -7,6 +8,11 @@ namespace OpenTabletDriver.UX.Gtk
         [STAThread]
         public static void Main(string[] args)
         {
+            App.Initialized += () =>
+            {
+                HudManager.Instance.Initialize();
+            };
+
             App.Run(Eto.Platforms.Gtk, args);
         }
     }

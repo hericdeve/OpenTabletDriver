@@ -12,10 +12,10 @@ using OpenTabletDriver.Plugin;
 
 namespace OpenTabletDriver.Desktop.Interop.AppProfiler
 {
-    public class HyprlandTrackingThread : IDisposable
+    public sealed class HyprlandTrackingThread : IDisposable
     {
         private readonly HyprlandIpcService _ipcService;
-        private readonly IEnumerable<string> _targetNamespaces;
+        private HashSet<string> _targetNamespaces;
         private readonly string _socket2Path;
         private List<TrackedLayer> _cachedLayers = new List<TrackedLayer>();
         private readonly object _layerLock = new object();
@@ -41,7 +41,7 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
 
         public HyprlandTrackingThread(IEnumerable<string> targetNamespaces)
         {
-            _targetNamespaces = targetNamespaces.ToList();
+            _targetNamespaces = new HashSet<string>(targetNamespaces, StringComparer.OrdinalIgnoreCase);
             _ipcService = new HyprlandIpcService();
 
             var hyprlandSignature = Environment.GetEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE");
@@ -87,9 +87,23 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
             }
         }
 
+        public void UpdateTargetNamespaces(IEnumerable<string> targetNamespaces)
+        {
+            lock (_layerLock)
+            {
+                _targetNamespaces = new HashSet<string>(targetNamespaces, StringComparer.OrdinalIgnoreCase);
+            }
+            RefreshLayerCache();
+        }
+
         private void RefreshLayerCache()
         {
-            var newLayers = _ipcService.GetTrackedLayers(_targetNamespaces);
+            HashSet<string> targets;
+            lock (_layerLock)
+            {
+                targets = new HashSet<string>(_targetNamespaces, StringComparer.OrdinalIgnoreCase);
+            }
+            var newLayers = _ipcService.GetTrackedLayers(targets);
             lock (_layerLock)
             {
                 _cachedLayers = newLayers;
@@ -189,6 +203,7 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
         {
             Stop();
             _cancellationTokenSource?.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

@@ -48,8 +48,11 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
         {
             var ipcService = new HyprlandIpcService();
             var response = ipcService.SendCommand("j/activewindow");
-            if (string.IsNullOrEmpty(response))
+            if (string.IsNullOrWhiteSpace(response))
+            {
+                ActiveWindowChanged?.Invoke(this, new ActiveWindowChangedEventArgs(string.Empty, string.Empty));
                 return;
+            }
 
             try
             {
@@ -61,10 +64,15 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
                     var windowTitle = titleElement.GetString() ?? string.Empty;
                     ActiveWindowChanged?.Invoke(this, new ActiveWindowChangedEventArgs(windowClass, windowTitle));
                 }
+                else
+                {
+                    ActiveWindowChanged?.Invoke(this, new ActiveWindowChangedEventArgs(string.Empty, string.Empty));
+                }
             }
             catch (Exception ex)
             {
                 Log.Write("HyprlandAppProfiler", $"Failed to force refresh active window: {ex.Message}", LogLevel.Error);
+                ActiveWindowChanged?.Invoke(this, new ActiveWindowChangedEventArgs(string.Empty, string.Empty));
             }
         }
 
@@ -108,12 +116,12 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
 
                             if (splitIndex >= 0)
                             {
-                                windowClass = data.Substring(0, splitIndex);
-                                windowTitle = data.Substring(splitIndex + 1);
+                                windowClass = data.Substring(0, splitIndex).Trim();
+                                windowTitle = data.Substring(splitIndex + 1).Trim();
                             }
                             else
                             {
-                                windowClass = data;
+                                windowClass = data.Trim();
                             }
 
                             ActiveWindowChanged?.Invoke(this, new ActiveWindowChangedEventArgs(windowClass, windowTitle));

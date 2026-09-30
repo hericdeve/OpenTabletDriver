@@ -27,7 +27,13 @@ namespace OpenTabletDriver.Desktop.Binding
                         stateBinding.Press(tablet, report);
                 }
                 else if (!newState && PreviousState)
+                {
                     stateBinding.Release(tablet, report);
+                }
+                else if (newState && PreviousState && Binding is IContinuousBinding continuousBinding)
+                {
+                    continuousBinding.Update(tablet, report);
+                }
             }
 
             if (!newState || pressureThresholdIsMetOrUnneeded) // don't update state to true without threshold

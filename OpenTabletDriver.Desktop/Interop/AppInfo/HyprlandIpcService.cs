@@ -90,6 +90,49 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
             return null;
         }
 
+        public Dictionary<string, (int x, int y)> GetMonitorOffsets()
+        {
+            var offsets = new Dictionary<string, (int x, int y)>(StringComparer.OrdinalIgnoreCase);
+            var response = SendCommand("j/monitors");
+            if (string.IsNullOrEmpty(response))
+                return offsets;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(response);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var monitor in doc.RootElement.EnumerateArray())
+                    {
+                        if (monitor.TryGetProperty("disabled", out var disabledProp) && disabledProp.GetBoolean())
+                            continue;
+
+                        if (monitor.TryGetProperty("name", out var nameProp))
+                        {
+                            var name = nameProp.GetString();
+                            if (!string.IsNullOrEmpty(name))
+                            {
+                                int x = 0;
+                                int y = 0;
+                                if (monitor.TryGetProperty("x", out var xProp))
+                                    x = xProp.GetInt32();
+                                if (monitor.TryGetProperty("y", out var yProp))
+                                    y = yProp.GetInt32();
+
+                                offsets[name] = (x, y);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Write("HyprlandIpcService", $"Failed to parse j/monitors: {ex.Message}", LogLevel.Error);
+            }
+
+            return offsets;
+        }
+
         public List<TrackedLayer> GetTrackedLayers(IEnumerable<string> targetNamespaces)
         {
             var layers = new List<TrackedLayer>();
@@ -100,11 +143,15 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
 
             try
             {
+                var monitorOffsets = GetMonitorOffsets();
                 using var doc = JsonDocument.Parse(response);
-                var targets = new HashSet<string>(targetNamespaces);
+                var targets = new HashSet<string>(targetNamespaces, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var monitorProperty in doc.RootElement.EnumerateObject())
                 {
+                    var monitorName = monitorProperty.Name;
+                    var (mx, my) = monitorOffsets.TryGetValue(monitorName, out var offset) ? offset : (0, 0);
+
                     if (monitorProperty.Value.TryGetProperty("levels", out var levelsObj))
                     {
                         foreach (var levelProperty in levelsObj.EnumerateObject())
@@ -119,8 +166,8 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
                                         layers.Add(new TrackedLayer
                                         {
                                             Namespace = ns,
-                                            X = layerElement.GetProperty("x").GetInt32(),
-                                            Y = layerElement.GetProperty("y").GetInt32(),
+                                            X = mx + layerElement.GetProperty("x").GetInt32(),
+                                            Y = my + layerElement.GetProperty("y").GetInt32(),
                                             Width = layerElement.GetProperty("w").GetInt32(),
                                             Height = layerElement.GetProperty("h").GetInt32()
                                         });

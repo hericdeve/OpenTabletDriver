@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Attributes;
 using OpenTabletDriver.Plugin.Output;
@@ -37,13 +38,17 @@ namespace OpenTabletDriver.Desktop.Binding
         public PipelinePosition Position => PipelinePosition.PostTransform;
 
         private readonly TabletReference tablet;
+        private Vector2? _anchorPosition;
 
         public event Action<IDeviceReport?>? Emit;
 
         public void Consume(IDeviceReport? report)
         {
             if (report != null)
+            {
                 HandleBinding(report);
+                ApplyPointerSuppression(report);
+            }
 
             Emit?.Invoke(report);
         }
@@ -70,6 +75,7 @@ namespace OpenTabletDriver.Desktop.Binding
 
         public void ReleaseAllBindings()
         {
+            _anchorPosition = null;
             var report = new OutOfRangeReport(Array.Empty<byte>());
 
             Tip?.Invoke(tablet, report, false);
@@ -149,6 +155,7 @@ namespace OpenTabletDriver.Desktop.Binding
 
         private void HandleOutOfRangeReport(TabletReference tablet, IDeviceReport report)
         {
+            _anchorPosition = null;
             for (var i = 0; i < PenButtons.Count; i++)
             {
                 if (PenButtons.TryGetValue(i, out var binding))
@@ -193,6 +200,62 @@ namespace OpenTabletDriver.Desktop.Binding
         {
             foreach (var binding in bindings.Values.Where(binding => binding != null))
                 binding!.Invoke(tablet, report, false);
+        }
+
+        private void ApplyPointerSuppression(IDeviceReport report)
+        {
+            if (HasActiveSuppressor(out bool suppressMotion, out bool suppressTip))
+            {
+                if (suppressMotion && report is IAbsolutePositionReport absReport)
+                {
+                    _anchorPosition ??= absReport.Position;
+                    absReport.Position = _anchorPosition.Value;
+                }
+                else if (!suppressMotion)
+                {
+                    _anchorPosition = null;
+                }
+
+                if (suppressTip && report is ITabletReport tabletReport)
+                {
+                    tabletReport.Pressure = 0;
+                }
+            }
+            else
+            {
+                _anchorPosition = null;
+            }
+        }
+
+        private bool HasActiveSuppressor(out bool suppressMotion, out bool suppressTip)
+        {
+            bool motion = false;
+            bool tip = false;
+
+            CheckState(Tip);
+            CheckState(Eraser);
+
+            foreach (var state in PenButtons.Values)
+                CheckState(state);
+
+            foreach (var state in AuxButtons.Values)
+                CheckState(state);
+
+            foreach (var state in MouseButtons.Values)
+                CheckState(state);
+
+            suppressMotion = motion;
+            suppressTip = tip;
+            return motion || tip;
+
+            void CheckState(BindingState? state)
+            {
+                if (state?.Binding is IPointerSuppressor { IsActive: true } suppressor)
+                {
+                    motion |= suppressor.SuppressMotion;
+                    tip |= suppressor.SuppressTip;
+                }
+            }
         }
     }
 }

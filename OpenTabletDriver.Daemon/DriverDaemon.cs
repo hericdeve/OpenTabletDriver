@@ -11,6 +11,7 @@ using OpenTabletDriver.Desktop;
 using OpenTabletDriver.Desktop.Binding;
 using OpenTabletDriver.Desktop.Contracts;
 using OpenTabletDriver.Desktop.Diagnostics;
+using OpenTabletDriver.Desktop.Hud;
 using OpenTabletDriver.Desktop.Interop;
 using OpenTabletDriver.Desktop.Profiles;
 using OpenTabletDriver.Desktop.Reflection;
@@ -136,9 +137,13 @@ namespace OpenTabletDriver.Daemon
         public event EventHandler<DebugReportData>? DeviceReport;
         public event EventHandler<IEnumerable<TabletReference>>? TabletsChanged;
         public event EventHandler? Resynchronize;
+        public event EventHandler<HudShowRequest>? ShowHudRequested;
+        public event EventHandler<HudUpdateRequest>? UpdateHudRequested;
+        public event EventHandler? DismissHudRequested;
 
         public Driver Driver { get; }
         public Settings? Settings { set; get; }
+        public Settings? BaseSettings { get; private set; }
         public AppProfilerSettings AppProfilerSettings { get; private set; } = new AppProfilerSettings();
         private Collection<ITool> Tools { set; get; } = new Collection<ITool>();
         private readonly IUpdater? Updater = DesktopInterop.Updater;
@@ -215,10 +220,17 @@ namespace OpenTabletDriver.Daemon
             return await GetTablets();
         }
 
-        public Task SetSettings(Settings? settings)
+        public Task SetSettings(Settings? settings) => SetSettings(settings, false);
+
+        public Task SetSettings(Settings? settings, bool isAppProfileUpdate)
         {
             try
             {
+                if (!isAppProfileUpdate && settings != null)
+                {
+                    BaseSettings = settings.Clone();
+                }
+
                 foreach (var dev in Driver.InputDevices)
                 {
                     if (dev.OutputMode?.Elements != null)
@@ -231,6 +243,11 @@ namespace OpenTabletDriver.Daemon
                 }
 
                 Settings = settings ??= Settings.GetDefaults();
+
+                if (!isAppProfileUpdate && BaseSettings == null)
+                {
+                    BaseSettings = Settings.Clone();
+                }
 
                 foreach (var dev in Driver.InputDevices)
                 {
@@ -286,9 +303,14 @@ namespace OpenTabletDriver.Daemon
 
                 SetToolSettings();
 
-                _appProfileMonitor.Initialize();
+                if (!isAppProfileUpdate)
+                {
+                    _appProfileMonitor.ResetActiveTrackingState();
+                    _appProfileMonitor.Initialize();
+                }
 
                 lastValidSettings = settings;
+                Resynchronize?.Invoke(this, EventArgs.Empty);
                 return Task.CompletedTask;
             }
             catch (Exception ex)
@@ -296,7 +318,7 @@ namespace OpenTabletDriver.Daemon
                 Log.Write("Settings", $"Exception in SetSettings: {ex}", LogLevel.Error);
                 try
                 {
-                    SetSettings(lastValidSettings);
+                    SetSettings(lastValidSettings, isAppProfileUpdate);
                     Log.Write("Settings", "Failed to apply settings. Reverted to last valid settings.", LogLevel.Error, true);
                 }
                 catch
@@ -537,6 +559,8 @@ namespace OpenTabletDriver.Daemon
 
             if (pointer is IMouseScrollHandler mouseScrollHandler)
                 bindingServiceProvider.AddService(() => mouseScrollHandler);
+            else if (DesktopInterop.RelativePointer is IMouseScrollHandler fallbackScrollHandler)
+                bindingServiceProvider.AddService(() => fallbackScrollHandler);
 
             if (pointer is IPenActionHandler penActionHandler)
                 bindingServiceProvider.AddService(() => penActionHandler);
@@ -680,7 +704,7 @@ namespace OpenTabletDriver.Daemon
 
         public Task<Settings> GetSettings()
         {
-            return Task.FromResult(Settings ?? Settings.GetDefaults());
+            return Task.FromResult((BaseSettings ?? Settings ?? Settings.GetDefaults()).Clone());
         }
 
         public Task SetAppProfilerSettings(AppProfilerSettings settings)
@@ -773,6 +797,159 @@ namespace OpenTabletDriver.Daemon
         {
             Resynchronize?.Invoke(this, EventArgs.Empty);
             return Task.CompletedTask;
+        }
+
+        public Task TriggerHudShow(HudShowRequest request)
+        {
+            ShowHudRequested?.Invoke(this, request);
+            return Task.CompletedTask;
+        }
+
+        public Task TriggerHudUpdate(HudUpdateRequest request)
+        {
+            UpdateHudRequested?.Invoke(this, request);
+            return Task.CompletedTask;
+        }
+
+        public Task TriggerHudDismiss()
+        {
+            DismissHudRequested?.Invoke(this, EventArgs.Empty);
+            return Task.CompletedTask;
+        }
+
+        public async Task ExecuteHudAction(HudAction action)
+        {
+            if (action == null) return;
+
+            try
+            {
+                switch (action.Type)
+                {
+                    case HudActionType.KeySequence when !string.IsNullOrWhiteSpace(action.Value):
+                        var keys = action.Value.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                        if (keys.Length > 0 && DesktopInterop.VirtualKeyboard != null)
+                        {
+                            DesktopInterop.VirtualKeyboard.Press(keys);
+                            await Task.Delay(25);
+                            DesktopInterop.VirtualKeyboard.Release(keys);
+                        }
+                        break;
+                    case HudActionType.DriverCommand:
+                        await HandleDriverCommand(action.Value, action.SecondaryValue);
+                        break;
+                    case HudActionType.MouseClick:
+                        await HandleMouseClick(action.Value);
+                        break;
+                    case HudActionType.ShellCommand when !string.IsNullOrWhiteSpace(action.Value):
+                        Process.Start(new ProcessStartInfo("/bin/bash", $"-c \"{action.Value.Replace("\"", "\\\"")}\"") { UseShellExecute = false });
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex);
+            }
+        }
+
+        private async Task HandleDriverCommand(string? command, string? secondaryValue)
+        {
+            switch (command)
+            {
+                case "Preset" when !string.IsNullOrWhiteSpace(secondaryValue):
+                    AppInfo.PresetManager.Refresh();
+                    var preset = AppInfo.PresetManager.FindPreset(secondaryValue);
+                    if (preset != null)
+                    {
+                        await SetSettings(preset.Settings.Clone());
+                        await ForceResynchronize();
+                    }
+                    break;
+                case "DisplayToggle":
+                    CycleDisplay();
+                    break;
+                case "PrecisionMode":
+                    Log.Write("HUD", "Precision mode action triggered");
+                    break;
+            }
+        }
+
+        private static async Task HandleMouseClick(string? button)
+        {
+            var btn = button?.ToLowerInvariant() switch
+            {
+                "middle" => MouseButton.Middle,
+                "right" => MouseButton.Right,
+                _ => MouseButton.Left
+            };
+
+            var mouseHandler = DesktopInterop.RelativePointer as IMouseButtonHandler;
+            if (mouseHandler != null)
+            {
+                mouseHandler.MouseDown(btn);
+                await Task.Delay(20);
+                mouseHandler.MouseUp(btn);
+            }
+        }
+
+        private void CycleDisplay()
+        {
+            var virtualScreen = DesktopInterop.VirtualScreen;
+            if (virtualScreen == null || Settings == null) return;
+
+            var displays = virtualScreen.Displays.ToList();
+            if (displays.Count <= 1) return;
+
+            foreach (var profile in Settings.Profiles)
+            {
+                if (profile.AbsoluteModeSettings != null)
+                {
+                    var currentDisplay = profile.AbsoluteModeSettings.Display;
+                    int currentIndex = -1;
+                    for (int i = 0; i < displays.Count; i++)
+                    {
+                        if (Math.Abs(displays[i].Position.X - currentDisplay.X) < 1 &&
+                            Math.Abs(displays[i].Position.Y - currentDisplay.Y) < 1 &&
+                            Math.Abs(displays[i].Width - currentDisplay.Width) < 1 &&
+                            Math.Abs(displays[i].Height - currentDisplay.Height) < 1)
+                        {
+                            currentIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (currentIndex >= 0 && currentIndex < displays.Count - 1)
+                    {
+                        var nextDisplay = displays[currentIndex + 1];
+                        currentDisplay.Width = nextDisplay.Width;
+                        currentDisplay.Height = nextDisplay.Height;
+                        currentDisplay.X = nextDisplay.Position.X;
+                        currentDisplay.Y = nextDisplay.Position.Y;
+                        currentDisplay.Rotation = 0;
+                        Log.Write("HUD", $"Cycled to display: {nextDisplay.Width}x{nextDisplay.Height} @ ({nextDisplay.Position.X},{nextDisplay.Position.Y})");
+                    }
+                    else if (currentIndex == displays.Count - 1)
+                    {
+                        currentDisplay.Width = virtualScreen.Width;
+                        currentDisplay.Height = virtualScreen.Height;
+                        currentDisplay.X = 0;
+                        currentDisplay.Y = 0;
+                        currentDisplay.Rotation = 0;
+                        Log.Write("HUD", $"Cycled to all displays: {virtualScreen.Width}x{virtualScreen.Height}");
+                    }
+                    else
+                    {
+                        var first = displays[0];
+                        currentDisplay.Width = first.Width;
+                        currentDisplay.Height = first.Height;
+                        currentDisplay.X = first.Position.X;
+                        currentDisplay.Y = first.Position.Y;
+                        currentDisplay.Rotation = 0;
+                        Log.Write("HUD", $"Cycled to first display");
+                    }
+                }
+            }
+
+            _ = SetSettings(Settings);
         }
 
         private static void InitializePlatform()

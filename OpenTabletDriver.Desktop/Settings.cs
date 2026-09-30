@@ -14,6 +14,7 @@ namespace OpenTabletDriver.Desktop
         private ProfileCollection profiles = new ProfileCollection();
         private bool lockUsableAreaDisplay, lockUsableAreaTablet;
         private PluginSettingStoreCollection tools = new PluginSettingStoreCollection();
+        private OpenTabletDriver.Desktop.Hud.HudConfiguration? hud;
         private string revision = GetVersion();
 
         [JsonProperty(nameof(Revision))]
@@ -51,13 +52,21 @@ namespace OpenTabletDriver.Desktop
             get => this.tools;
         }
 
+        [JsonProperty(nameof(Hud))]
+        public Hud.HudConfiguration Hud
+        {
+            set => RaiseAndSetIfChanged(ref this.hud, value);
+            get => this.hud ??= OpenTabletDriver.Desktop.Hud.HudConfiguration.GetDefaults();
+        }
+
         public static Settings GetDefaults()
         {
             return new Settings
             {
                 Profiles = GetDefaultProfiles(),
                 LockUsableAreaDisplay = true,
-                LockUsableAreaTablet = true
+                LockUsableAreaTablet = true,
+                Hud = OpenTabletDriver.Desktop.Hud.HudConfiguration.GetDefaults()
             };
         }
 
@@ -71,7 +80,8 @@ namespace OpenTabletDriver.Desktop
 
         private static readonly JsonSerializer serializer = new JsonSerializer
         {
-            Formatting = Formatting.Indented
+            Formatting = Formatting.Indented,
+            ObjectCreationHandling = ObjectCreationHandling.Replace
         };
 
         public static bool TryDeserialize(FileInfo file, [NotNullWhen(true)] out Settings? settings)

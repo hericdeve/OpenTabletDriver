@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Eto.Forms;
 using OpenTabletDriver.Desktop.Contracts;
+using OpenTabletDriver.Desktop.Hud;
 using OpenTabletDriver.Desktop.RPC;
 using OpenTabletDriver.Plugin.Logging;
 using OpenTabletDriver.Plugin.Tablet;
@@ -19,6 +20,9 @@ namespace OpenTabletDriver.UX.RPC
         public event EventHandler<DebugReportData>? DeviceReport;
         public event EventHandler<IEnumerable<TabletReference>>? TabletsChanged;
         public event EventHandler? Resynchronize;
+        public event EventHandler<HudShowRequest>? ShowHudRequested;
+        public event EventHandler<HudUpdateRequest>? UpdateHudRequested;
+        public event EventHandler? DismissHudRequested;
 
         protected override void OnConnected()
         {
@@ -33,6 +37,12 @@ namespace OpenTabletDriver.UX.RPC
                 Application.Instance.AsyncInvoke(() => TabletsChanged?.Invoke(sender, e));
             Instance.Resynchronize += (sender, e) =>
                 Application.Instance.AsyncInvoke(() => Resynchronize?.Invoke(sender, e));
+            Instance.ShowHudRequested += (sender, e) =>
+                Application.Instance.AsyncInvoke(() => ShowHudRequested?.Invoke(sender, e));
+            Instance.UpdateHudRequested += (sender, e) =>
+                Application.Instance.AsyncInvoke(() => UpdateHudRequested?.Invoke(sender, e));
+            Instance.DismissHudRequested += (sender, e) =>
+                Application.Instance.AsyncInvoke(() => DismissHudRequested?.Invoke(sender, e));
         }
     }
 }

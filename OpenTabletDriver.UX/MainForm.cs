@@ -1021,8 +1021,10 @@ namespace OpenTabletDriver.UX
             {
                 var settingsToApply = preset.Settings.Clone();
 
+                App.Current.Settings = settingsToApply;
                 await App.Driver.Instance.SetSettings(settingsToApply);
                 settingsToApply.Serialize(new FileInfo(AppInfo.Current.SettingsFile));
+                await SyncSettings();
 
                 Log.Write("Settings", $"Applied preset '{preset.Name}'");
             }

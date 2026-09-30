@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using OpenTabletDriver.Desktop.Diagnostics;
+using OpenTabletDriver.Desktop.Hud;
 using OpenTabletDriver.Desktop.Reflection.Metadata;
 using OpenTabletDriver.Desktop.RPC;
 using OpenTabletDriver.Desktop.Updater;
@@ -17,6 +18,9 @@ namespace OpenTabletDriver.Desktop.Contracts
         event EventHandler<DebugReportData>? DeviceReport;
         event EventHandler<IEnumerable<TabletReference>>? TabletsChanged;
         event EventHandler? Resynchronize;
+        event EventHandler<HudShowRequest>? ShowHudRequested;
+        event EventHandler<HudUpdateRequest>? UpdateHudRequested;
+        event EventHandler? DismissHudRequested;
 
         Task WriteMessage(LogMessage message);
 
@@ -49,5 +53,10 @@ namespace OpenTabletDriver.Desktop.Contracts
         Task InstallUpdate();
 
         Task ForceResynchronize();
+
+        Task TriggerHudShow(HudShowRequest request);
+        Task TriggerHudUpdate(HudUpdateRequest request);
+        Task TriggerHudDismiss();
+        Task ExecuteHudAction(HudAction action);
     }
 }

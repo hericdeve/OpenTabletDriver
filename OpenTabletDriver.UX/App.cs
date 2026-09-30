@@ -37,6 +37,8 @@ namespace OpenTabletDriver.UX
         public CancellationTokenSource Canceler { get; } = new();
         public bool IsActive { get; private set; } = true;
 
+        public static event Action? Initialized;
+
         public static void Run(string platform, string[] args)
         {
             var commandLineOptions = ParseCmdLineOptions(args);
@@ -58,6 +60,7 @@ namespace OpenTabletDriver.UX
         private static void RunInternal(string platform, CommandLineOptions options)
         {
             var app = new Application(platform);
+            Initialized?.Invoke();
             var mainForm = new MainForm();
 
             TaskScheduler.UnobservedTaskException += (_, e) =>
@@ -177,7 +180,8 @@ namespace OpenTabletDriver.UX
         public IDictionary<string, Action> NotificationHandlers { get; } = new Dictionary<string, Action>();
 
         public static DaemonRpcClient Driver { get; } = new DaemonRpcClient("OpenTabletDriver.Daemon");
-        public static Bitmap Logo { get; } = new Bitmap(Assembly.GetExecutingAssembly().GetManifestResourceStream("OpenTabletDriver.UX.Assets.otd.png"));
+        private static Bitmap? logo;
+        public static Bitmap Logo => logo ??= new Bitmap(Assembly.GetExecutingAssembly().GetManifestResourceStream("OpenTabletDriver.UX.Assets.otd.png"));
 
         public static Uri Website { get; } = new Uri(@"https://github.com/OpenTabletDriver/OpenTabletDriver");
         public static string License { get; } = new StreamReader(Assembly.GetExecutingAssembly().GetManifestResourceStream("OpenTabletDriver.UX.LICENSE")).ReadToEnd();
