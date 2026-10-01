@@ -23,7 +23,8 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                             Text = "Auxiliary",
                             Content = auxButtons = new BindingDisplayList
                             {
-                                Prefix = "Auxiliary Binding"
+                                Prefix = "Express Key",
+                                TitleWidth = 140
                             }
                         }
                     }

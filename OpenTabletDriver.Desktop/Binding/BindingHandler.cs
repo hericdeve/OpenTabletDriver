@@ -336,6 +336,7 @@ namespace OpenTabletDriver.Desktop.Binding
         }
 
         public Func<bool>? IsDaemonPrecisionActive { get; set; }
+        public Func<float>? GetDaemonPrecisionScale { get; set; }
 
         private bool HasActivePrecisionModifier(out float scale, out bool reanchorOnLift)
         {
@@ -363,7 +364,7 @@ namespace OpenTabletDriver.Desktop.Binding
 
             if (IsDaemonPrecisionActive?.Invoke() == true)
             {
-                scale = 0.3f; // Default 30% speed for HUD / CLI toggle
+                scale = GetDaemonPrecisionScale?.Invoke() ?? 0.3f; // Default 30% speed for HUD / CLI toggle
                 reanchorOnLift = true;
                 return true;
             }

@@ -1,3 +1,4 @@
+using System;
 using Eto.Forms;
 using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.UX.Controls.Generic;
@@ -8,8 +9,14 @@ namespace OpenTabletDriver.UX.Controls.Bindings
     {
         public required string Prefix { set; get; }
 
+        public Func<int, string>? GetTitleFunc { get; set; }
+        public int TitleWidth { get; set; } = 140;
+
         protected virtual string GetTextForIndex(int index)
         {
+            if (GetTitleFunc != null)
+                return GetTitleFunc(index);
+
             return $"{Prefix} {index + 1}";
         }
 
@@ -21,8 +28,10 @@ namespace OpenTabletDriver.UX.Controls.Bindings
             return new Group
             {
                 Text = GetTextForIndex(index),
+                TitleWidth = this.TitleWidth,
+                TitleVerticalAlignment = VerticalAlignment.Top,
                 Orientation = Orientation.Horizontal,
-                ExpandContent = false,
+                ExpandContent = true,
                 Content = display
             };
         }

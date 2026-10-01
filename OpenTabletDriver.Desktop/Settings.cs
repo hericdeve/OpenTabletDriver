@@ -15,6 +15,7 @@ namespace OpenTabletDriver.Desktop
         private bool lockUsableAreaDisplay, lockUsableAreaTablet;
         private PluginSettingStoreCollection tools = new PluginSettingStoreCollection();
         private OpenTabletDriver.Desktop.Hud.HudConfiguration? hud;
+        private OpenTabletDriver.Desktop.Tools.ContextualToolsConfiguration? contextualTools;
         private string revision = GetVersion();
 
         [JsonProperty(nameof(Revision))]
@@ -59,6 +60,20 @@ namespace OpenTabletDriver.Desktop
             get => this.hud ??= OpenTabletDriver.Desktop.Hud.HudConfiguration.GetDefaults();
         }
 
+        [JsonProperty(nameof(ContextualTools))]
+        public OpenTabletDriver.Desktop.Tools.ContextualToolsConfiguration ContextualTools
+        {
+            set => RaiseAndSetIfChanged(ref this.contextualTools, value);
+            get
+            {
+                if (this.contextualTools == null)
+                    this.contextualTools = OpenTabletDriver.Desktop.Tools.ContextualToolsConfiguration.GetDefaults();
+                else
+                    this.contextualTools.Deduplicate();
+                return this.contextualTools;
+            }
+        }
+
         public static Settings GetDefaults()
         {
             return new Settings
@@ -66,7 +81,8 @@ namespace OpenTabletDriver.Desktop
                 Profiles = GetDefaultProfiles(),
                 LockUsableAreaDisplay = true,
                 LockUsableAreaTablet = true,
-                Hud = OpenTabletDriver.Desktop.Hud.HudConfiguration.GetDefaults()
+                Hud = OpenTabletDriver.Desktop.Hud.HudConfiguration.GetDefaults(),
+                ContextualTools = OpenTabletDriver.Desktop.Tools.ContextualToolsConfiguration.GetDefaults()
             };
         }
 

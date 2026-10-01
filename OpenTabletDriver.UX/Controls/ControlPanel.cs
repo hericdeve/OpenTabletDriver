@@ -31,6 +31,12 @@ namespace OpenTabletDriver.UX.Controls
 
             control.Pages.Add(new TabPage
             {
+                Text = "App Tools",
+                Content = contextualToolEditor = new()
+            });
+
+            control.Pages.Add(new TabPage
+            {
                 Text = "Filters",
                 Padding = 5,
                 Content = filterEditor = new()
@@ -104,6 +110,7 @@ namespace OpenTabletDriver.UX.Controls
         private LogView logView;
         private OutputModeEditor outputModeEditor;
         private HudEditor hudEditor;
+        private ContextualToolEditor contextualToolEditor;
         private BindingEditor penBindingEditor, auxBindingEditor, mouseBindingEditor;
         private List<BindingEditor> wheelBindingEditors = [];
         private PluginSettingStoreCollectionEditor<IPositionedPipelineElement<IDeviceReport>> filterEditor;
@@ -141,6 +148,8 @@ namespace OpenTabletDriver.UX.Controls
 
                 SetPageVisibility(placeholder, false);
                 SetPageVisibility(outputModeEditor, true);
+                SetPageVisibility(hudEditor, true);
+                SetPageVisibility(contextualToolEditor, true);
                 SetPageVisibility(filterEditor, true);
                 SetPageVisibility(penBindingEditor, true);
                 SetPageVisibility(auxBindingEditor, tablet.Properties.Specifications.AuxiliaryButtons != null);
@@ -158,6 +167,8 @@ namespace OpenTabletDriver.UX.Controls
             {
                 SetPageVisibility(placeholder, true);
                 SetPageVisibility(outputModeEditor, false);
+                SetPageVisibility(hudEditor, false);
+                SetPageVisibility(contextualToolEditor, false);
                 SetPageVisibility(filterEditor, false);
                 SetPageVisibility(penBindingEditor, false);
                 SetPageVisibility(auxBindingEditor, false);

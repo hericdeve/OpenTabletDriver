@@ -9,7 +9,7 @@ using OpenTabletDriver.UX.Controls.Generic;
 
 namespace OpenTabletDriver.UX.Windows.Updater
 {
-    public class UpdaterWindow : Form
+    public class UpdaterWindow : DesktopForm
     {
         public UpdaterWindow()
         {

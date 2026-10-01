@@ -76,11 +76,19 @@ namespace OpenTabletDriver.UX
                 mainForm.WindowState = WindowState.Minimized;
                 if (EnableTrayIcon)
                 {
-                    mainForm.Show();
-                    mainForm.Visible = true;
-                    mainForm.WindowState = WindowState.Minimized;
-                    mainForm.ShowInTaskbar = false;
-                    mainForm.Visible = false;
+                    try
+                    {
+                        if (!mainForm.Visible)
+                            mainForm.Show();
+                        mainForm.Visible = true;
+                        mainForm.WindowState = WindowState.Minimized;
+                        mainForm.ShowInTaskbar = false;
+                        mainForm.Visible = false;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Exception(ex);
+                    }
                 }
             }
 
@@ -110,8 +118,16 @@ namespace OpenTabletDriver.UX
 
                         app.AsyncInvoke(() =>
                         {
-                            mainForm.Show();
-                            mainForm.BringToFront();
+                            try
+                            {
+                                if (!mainForm.Visible)
+                                    mainForm.Show();
+                                mainForm.BringToFront();
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Exception(ex);
+                            }
                         });
 
                         ipcServer.Disconnect();

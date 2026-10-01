@@ -37,15 +37,19 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                     new Group
                                     {
                                         Text = "Scroll Up",
+                                        TitleWidth = 110,
+                                        TitleVerticalAlignment = VerticalAlignment.Top,
                                         Orientation = Orientation.Horizontal,
-                                        ExpandContent = false,
+                                        ExpandContent = true,
                                         Content = scrollUp = new BindingDisplay()
                                     },
                                     new Group
                                     {
                                         Text = "Scroll Down",
+                                        TitleWidth = 110,
+                                        TitleVerticalAlignment = VerticalAlignment.Top,
                                         Orientation = Orientation.Horizontal,
-                                        ExpandContent = false,
+                                        ExpandContent = true,
                                         Content = scrollDown = new BindingDisplay()
                                     }
                                 }
@@ -65,6 +69,12 @@ namespace OpenTabletDriver.UX.Controls.Bindings
 
         private class MouseBindingDisplayList : BindingDisplayList
         {
+            public MouseBindingDisplayList()
+            {
+                Prefix = "Mouse Button";
+                TitleWidth = 140;
+            }
+
             protected override string GetTextForIndex(int index)
             {
                 return index switch

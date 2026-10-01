@@ -111,7 +111,7 @@ namespace OpenTabletDriver.UX.Gtk.Hud
 
         private void OnItemActivated(HudItem item)
         {
-            _ = App.Driver.Instance?.ExecuteHudAction(item.Action);
+            _ = App.Driver.Instance?.ExecuteHudItem(item);
         }
     }
 }

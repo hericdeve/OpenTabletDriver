@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Eto.Drawing;
 using Eto.Forms;
 using OpenTabletDriver.Desktop.Hud;
+using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.UX.Controls.Generic;
 
 namespace OpenTabletDriver.UX.Controls
@@ -31,8 +32,7 @@ namespace OpenTabletDriver.UX.Controls
         private readonly CheckBox _rightHandedCheckBox = new() { Text = "Right-handed layout (Quick Bar)" };
 
         private readonly List<TextBox> _labelBoxes = new();
-        private readonly List<DropDown> _typeDropDowns = new();
-        private readonly List<TextBox> _valueBoxes = new();
+        private readonly List<BindingDisplay> _bindingDisplays = new();
 
         public HudEditor()
         {
@@ -125,7 +125,7 @@ namespace OpenTabletDriver.UX.Controls
             // Build items table
             var itemsTable = new TableLayout
             {
-                Spacing = new Size(8, 6),
+                Spacing = new Size(10, 8),
                 Padding = new Padding(4)
             };
 
@@ -136,8 +136,7 @@ namespace OpenTabletDriver.UX.Controls
                 {
                     new Label { Text = "Position", Font = SystemFonts.Bold() },
                     new Label { Text = "Label", Font = SystemFonts.Bold() },
-                    new Label { Text = "Action Type", Font = SystemFonts.Bold() },
-                    new Label { Text = "Value / Shortcut", Font = SystemFonts.Bold() }
+                    new TableCell(new Label { Text = "Assigned Binding", Font = SystemFonts.Bold() }, scaleWidth: true)
                 }
             });
 
@@ -151,7 +150,7 @@ namespace OpenTabletDriver.UX.Controls
                     Width = 140
                 };
 
-                var labelBox = new TextBox { Width = 100 };
+                var labelBox = new TextBox { Width = 110 };
                 labelBox.TextChanged += (s, e) =>
                 {
                     if (_isUpdating) return;
@@ -162,35 +161,27 @@ namespace OpenTabletDriver.UX.Controls
                 };
                 _labelBoxes.Add(labelBox);
 
-                var typeDropDown = new DropDown { Width = 140 };
-                typeDropDown.Items.Add(new ListItem { Text = "Key Sequence", Key = "0" });
-                typeDropDown.Items.Add(new ListItem { Text = "Driver Command", Key = "1" });
-                typeDropDown.Items.Add(new ListItem { Text = "Mouse Click", Key = "2" });
-                typeDropDown.Items.Add(new ListItem { Text = "Shell Command", Key = "3" });
-                typeDropDown.SelectedValueChanged += (s, e) =>
-                {
-                    if (_isUpdating) return;
-                    if (index < CurrentConfig.Items.Count && int.TryParse(typeDropDown.SelectedKey, out var typeVal))
-                    {
-                        CurrentConfig.Items[index].Action.Type = (HudActionType)typeVal;
-                    }
-                };
-                _typeDropDowns.Add(typeDropDown);
-
-                var valueBox = new TextBox { Width = 180 };
-                valueBox.TextChanged += (s, e) =>
+                var bindingDisplay = new BindingDisplay(allowSecondaryModes: false);
+                bindingDisplay.StoreChanged += (s, e) =>
                 {
                     if (_isUpdating) return;
                     if (index < CurrentConfig.Items.Count)
                     {
-                        CurrentConfig.Items[index].Action.Value = valueBox.Text;
+                        var item = CurrentConfig.Items[index];
+                        item.Binding = bindingDisplay.Store;
+                        item.SyncActionFromBinding();
                     }
                 };
-                _valueBoxes.Add(valueBox);
+                _bindingDisplays.Add(bindingDisplay);
 
                 itemsTable.Rows.Add(new TableRow
                 {
-                    Cells = { posLabel, labelBox, typeDropDown, valueBox }
+                    Cells =
+                    {
+                        posLabel,
+                        labelBox,
+                        new TableCell(bindingDisplay, scaleWidth: true)
+                    }
                 });
             }
 
@@ -207,7 +198,7 @@ namespace OpenTabletDriver.UX.Controls
 
             var itemsGroup = new Group
             {
-                Text = "HUD Slices & Actions (Apply or Save to take effect)",
+                Text = "HUD Slices & Actions (Full Binding Support - Click to Edit / Keybind, '...' for Advanced)",
                 Content = new StackLayout
                 {
                     Spacing = 8,
@@ -277,8 +268,7 @@ namespace OpenTabletDriver.UX.Controls
                 {
                     var item = config.Items[i];
                     _labelBoxes[i].Text = item.Label ?? string.Empty;
-                    _typeDropDowns[i].SelectedKey = ((int)item.Action.Type).ToString();
-                    _valueBoxes[i].Text = item.Action.Value ?? string.Empty;
+                    _bindingDisplays[i].Store = item.GetEffectiveBinding();
                 }
             }
             finally

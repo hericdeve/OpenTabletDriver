@@ -14,7 +14,8 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                 Text = "Wheel Buttons",
                 Content = wheelButtons = new BindingDisplayList
                 {
-                    Prefix = "Wheel Button Binding"
+                    Prefix = "Wheel Button",
+                    TitleWidth = 140
                 }
             };
 
@@ -39,8 +40,10 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                     new Group
                                     {
                                         Text = "Clockwise Rotation",
+                                        TitleWidth = 140,
+                                        TitleVerticalAlignment = VerticalAlignment.Top,
                                         Orientation = Orientation.Horizontal,
-                                        ExpandContent = false,
+                                        ExpandContent = true,
                                         Content = clockwiseButton = new BindingDisplay()
                                     },
                                     new UnitGroup
@@ -71,7 +74,9 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                     new Group
                                     {
                                         Text = "Counter-Clockwise Rotation",
-                                        ExpandContent = false,
+                                        TitleWidth = 140,
+                                        TitleVerticalAlignment = VerticalAlignment.Top,
+                                        ExpandContent = true,
                                         Orientation = Orientation.Horizontal,
                                         Content = counterClockwiseButton = new BindingDisplay()
                                     },

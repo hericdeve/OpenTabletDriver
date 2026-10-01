@@ -69,7 +69,13 @@ namespace OpenTabletDriver.Desktop.Binding
                 }
 
                 var settings = Daemon.GetSettings().GetAwaiter().GetResult();
-                var profile = settings.Profiles.GetProfile(tablet);
+                var profile = tablet != null ? settings.Profiles.GetProfile(tablet) : settings.Profiles.FirstOrDefault();
+                if (profile?.AbsoluteModeSettings == null)
+                {
+                    Log.Write(PLUGIN_NAME, "No active profile with absolute mode settings found.", LogLevel.Warning);
+                    return;
+                }
+
                 var display = profile.AbsoluteModeSettings.Display;
                 var currentIndex = HyprlandDisplayInterop.FindCurrentMonitorIndex(monitors, display);
                 var nextIndex = GetNextIndex(currentIndex, monitors.Length);
@@ -79,7 +85,8 @@ namespace OpenTabletDriver.Desktop.Binding
                 Daemon.SetSettings(settings).GetAwaiter().GetResult();
                 Daemon.ForceResynchronize().GetAwaiter().GetResult();
 
-                Log.Write(PLUGIN_NAME, $"Cycled '{tablet.Properties.Name}' to monitor {nextMonitor}.");
+                string tabletName = tablet?.Properties?.Name ?? profile.Tablet ?? "Tablet";
+                Log.Write(PLUGIN_NAME, $"Cycled '{tabletName}' to monitor {nextMonitor}.");
             }
             catch (Exception ex)
             {

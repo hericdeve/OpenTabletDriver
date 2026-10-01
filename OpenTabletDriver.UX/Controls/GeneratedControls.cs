@@ -105,7 +105,7 @@ namespace OpenTabletDriver.UX.Controls
             }
             else if (property.PropertyType == typeof(PluginSettingStore))
             {
-                var bindingDisplay = new BindingDisplay();
+                var bindingDisplay = new BindingDisplay(allowSecondaryModes: false);
                 bindingDisplay.StoreBinding.Bind(binding.Convert<PluginSettingStore?>(property));
                 rv = bindingDisplay;
             }

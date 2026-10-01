@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using OpenTabletDriver.Desktop.Diagnostics;
 using OpenTabletDriver.Desktop.Hud;
+using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.Desktop.Reflection.Metadata;
 using OpenTabletDriver.Desktop.RPC;
 using OpenTabletDriver.Desktop.Updater;
@@ -60,8 +61,13 @@ namespace OpenTabletDriver.Desktop.Contracts
         Task TriggerHudDismiss();
         Task ConfirmHudSelection(Vector2? finalPosition = null);
         Task ExecuteHudAction(HudAction action);
+        Task ExecuteHudItem(HudItem item);
+        Task ExecuteBinding(PluginSettingStore store);
 
         Task<bool> IsPrecisionModeActive();
         Task TogglePrecisionMode();
+
+        Task<string?> GetActiveWindowClass();
+        Task<string?> GetActiveWindowTitle();
     }
 }

@@ -27,6 +27,14 @@ namespace OpenTabletDriver.Daemon
         private string _lastActiveWindowClass = string.Empty;
         private string _lastActiveWindowTitle = string.Empty;
 
+        public string CurrentWindowClass => _lastActiveWindowClass;
+        public string CurrentWindowTitle => _lastActiveWindowTitle;
+
+        public void ForceRefreshActiveWindow()
+        {
+            _activeProvider?.ForceRefreshActiveWindow();
+        }
+
         public AppProfileMonitor(DriverDaemon daemon)
         {
             _daemon = daemon;
@@ -41,12 +49,7 @@ namespace OpenTabletDriver.Daemon
 
         public void Initialize()
         {
-            if (_daemon.Settings == null)
-                return;
-
-            var enableAppProfiler = _daemon.AppProfilerSettings.EnableAppProfiler;
-
-            if (enableAppProfiler && _activeProvider == null)
+            if (_activeProvider == null)
             {
                 _activeProvider = _providers.FirstOrDefault(p => p.IsSupported);
 
@@ -55,25 +58,31 @@ namespace OpenTabletDriver.Daemon
                     _activeProvider.ActiveWindowChanged += OnActiveWindowChanged;
                     _activeProvider.MonitorsChanged += OnMonitorsChanged;
                     _activeProvider.Start();
-                    Log.Write("AppProfileMonitor", "Application Profiler started.", LogLevel.Info);
-
-                    if (_activeProvider is HyprlandWindowProvider)
-                    {
-                        var targets = GetTargetNamespaces();
-                        _layerTracker = new HyprlandTrackingThread(targets);
-                        _layerTracker.LayerHoverStateChanged += OnLayerHoverStateChanged;
-                        _layerTracker.Start();
-                        Log.Write("AppProfileMonitor", "Hyprland Layer Tracker started.", LogLevel.Info);
-                    }
+                    _activeProvider.ForceRefreshActiveWindow();
+                    Log.Write("AppProfileMonitor", "Active Window Provider started.", LogLevel.Info);
                 }
                 else
                 {
                     Log.Write("AppProfileMonitor", "No supported Application Profiler provider found.", LogLevel.Warning);
                 }
             }
-            else if (enableAppProfiler && _activeProvider != null)
+
+            if (_daemon.Settings == null)
+                return;
+
+            var enableAppProfiler = _daemon.AppProfilerSettings.EnableAppProfiler;
+
+            if (enableAppProfiler)
             {
-                if (_layerTracker != null)
+                if (_activeProvider is HyprlandWindowProvider && _layerTracker == null)
+                {
+                    var targets = GetTargetNamespaces();
+                    _layerTracker = new HyprlandTrackingThread(targets);
+                    _layerTracker.LayerHoverStateChanged += OnLayerHoverStateChanged;
+                    _layerTracker.Start();
+                    Log.Write("AppProfileMonitor", "Hyprland Layer Tracker started.", LogLevel.Info);
+                }
+                else if (_layerTracker != null)
                 {
                     var targets = GetTargetNamespaces();
                     _layerTracker.UpdateTargetNamespaces(targets);
@@ -82,14 +91,8 @@ namespace OpenTabletDriver.Daemon
                 // Re-evaluate current active state with updated profiler rules
                 _ = ApplyActiveProfileAsync(_lastActiveWindowClass, _lastActiveWindowTitle);
             }
-            else if (!enableAppProfiler && _activeProvider != null)
+            else
             {
-                _activeProvider.Stop();
-                _activeProvider.ActiveWindowChanged -= OnActiveWindowChanged;
-                _activeProvider.MonitorsChanged -= OnMonitorsChanged;
-                _activeProvider = null;
-                Log.Write("AppProfileMonitor", "Application Profiler stopped.", LogLevel.Info);
-
                 if (_layerTracker != null)
                 {
                     _layerTracker.LayerHoverStateChanged -= OnLayerHoverStateChanged;
@@ -101,31 +104,6 @@ namespace OpenTabletDriver.Daemon
                 _currentOutputMode = null;
                 _isHoveringLayer = false;
                 _hoveredNamespace = null;
-                _lastActiveWindowClass = string.Empty;
-                _lastActiveWindowTitle = string.Empty;
-
-                // Restore base settings synchronously/cleanly if available
-                if (_daemon.BaseSettings != null)
-                {
-                    _ = Task.Run(async () =>
-                    {
-                        await _profileLock.WaitAsync().ConfigureAwait(false);
-                        try
-                        {
-                            if (_daemon.AppProfilerSettings.EnableAppProfiler)
-                                return;
-
-                            if (_daemon.BaseSettings != null)
-                            {
-                                await _daemon.SetSettings(_daemon.BaseSettings.Clone(), false).ConfigureAwait(false);
-                            }
-                        }
-                        finally
-                        {
-                            _profileLock.Release();
-                        }
-                    });
-                }
             }
         }
 
@@ -135,8 +113,6 @@ namespace OpenTabletDriver.Daemon
             _currentOutputMode = null;
             _isHoveringLayer = false;
             _hoveredNamespace = null;
-            _lastActiveWindowClass = string.Empty;
-            _lastActiveWindowTitle = string.Empty;
         }
 
         private HashSet<string> GetTargetNamespaces()
@@ -199,11 +175,11 @@ namespace OpenTabletDriver.Daemon
 
         private void OnActiveWindowChanged(object? sender, ActiveWindowChangedEventArgs e)
         {
-            if (_daemon.AppProfilerSettings == null || !_daemon.AppProfilerSettings.EnableAppProfiler)
-                return;
-
             _lastActiveWindowClass = e.WindowClass;
             _lastActiveWindowTitle = e.WindowTitle;
+
+            if (_daemon.AppProfilerSettings == null || !_daemon.AppProfilerSettings.EnableAppProfiler)
+                return;
 
             if (_isHoveringLayer && !string.IsNullOrEmpty(e.WindowClass))
             {

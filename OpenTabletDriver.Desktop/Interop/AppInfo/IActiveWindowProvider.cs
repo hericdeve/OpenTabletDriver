@@ -7,6 +7,7 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
         bool IsSupported { get; }
         void Start();
         void Stop();
+        void ForceRefreshActiveWindow();
         event EventHandler<ActiveWindowChangedEventArgs> ActiveWindowChanged;
         event EventHandler? MonitorsChanged;
     }

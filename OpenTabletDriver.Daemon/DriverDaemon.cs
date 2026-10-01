@@ -30,7 +30,7 @@ using OpenTabletDriver.SystemDrivers;
 
 namespace OpenTabletDriver.Daemon
 {
-    public class DriverDaemon : IDriverDaemon
+    public class DriverDaemon : IDriverDaemon, IActiveAppContext
     {
         private const string AVALONIA_REVISION = "0.7.0.0";
         private readonly AppProfileMonitor _appProfileMonitor;
@@ -186,6 +186,7 @@ namespace OpenTabletDriver.Daemon
             // Add services to inject on plugin construction
             AppInfo.PluginManager.AddService<IDriver>(() => this.Driver);
             AppInfo.PluginManager.AddService<IDriverDaemon>(() => this);
+            AppInfo.PluginManager.AddService<IActiveAppContext>(() => this);
 
             return Task.CompletedTask;
         }
@@ -719,14 +720,18 @@ namespace OpenTabletDriver.Daemon
             return Task.FromResult((BaseSettings ?? Settings ?? Settings.GetDefaults()).Clone());
         }
 
-        public Task SetAppProfilerSettings(AppProfilerSettings settings)
+        public async Task SetAppProfilerSettings(AppProfilerSettings settings)
         {
+            var wasEnabled = AppProfilerSettings?.EnableAppProfiler ?? false;
             AppProfilerSettings = settings ?? new AppProfilerSettings();
             var file = new FileInfo(AppInfo.Current.AppProfilesFile);
             AppProfilerSettings.Serialize(file);
             _appProfileMonitor.Initialize();
+            if (wasEnabled && !AppProfilerSettings.EnableAppProfiler && BaseSettings != null)
+            {
+                await SetSettings(BaseSettings.Clone(), true);
+            }
             Resynchronize?.Invoke(this, EventArgs.Empty);
-            return Task.CompletedTask;
         }
 
         public Task<AppProfilerSettings> GetAppProfilerSettings()
@@ -895,7 +900,7 @@ namespace OpenTabletDriver.Daemon
 
         public Task ConfirmHudSelection(Vector2? finalPosition = null)
         {
-            HudAction? actionToExecute = null;
+            HudItem? itemToExecute = null;
             lock (_hudLock)
             {
                 if (!IsHudActive)
@@ -911,7 +916,7 @@ namespace OpenTabletDriver.Daemon
 
                 if (ActiveHudConfig != null && CurrentHoveredSlice >= 0 && CurrentHoveredSlice < ActiveHudConfig.Items.Count)
                 {
-                    actionToExecute = ActiveHudConfig.Items[CurrentHoveredSlice].Action;
+                    itemToExecute = ActiveHudConfig.Items[CurrentHoveredSlice];
                 }
 
                 CurrentHoveredSlice = -1;
@@ -921,13 +926,13 @@ namespace OpenTabletDriver.Daemon
 
             DismissHudRequested?.Invoke(this, EventArgs.Empty);
 
-            if (actionToExecute != null)
+            if (itemToExecute != null)
             {
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        await ExecuteHudAction(actionToExecute);
+                        await ExecuteHudItem(itemToExecute);
                     }
                     catch (Exception ex)
                     {
@@ -956,6 +961,69 @@ namespace OpenTabletDriver.Daemon
             return Task.CompletedTask;
         }
 
+        public async Task ExecuteHudItem(HudItem item)
+        {
+            if (item == null) return;
+
+            var effectiveBinding = item.GetEffectiveBinding();
+            if (effectiveBinding != null)
+            {
+                await ExecuteBinding(effectiveBinding);
+                return;
+            }
+
+            if (item.Action != null)
+            {
+                await ExecuteHudAction(item.Action);
+            }
+        }
+
+        public async Task ExecuteBinding(PluginSettingStore store)
+        {
+            if (store == null || string.IsNullOrWhiteSpace(store.Path))
+                return;
+
+            try
+            {
+                var serviceProvider = new ServiceManager();
+                serviceProvider.AddService<IDriverDaemon>(() => this);
+
+                if (DesktopInterop.RelativePointer is IMouseButtonHandler mouseButtonHandler)
+                    serviceProvider.AddService(() => mouseButtonHandler);
+                if (DesktopInterop.RelativePointer is IMouseScrollHandler mouseScrollHandler)
+                    serviceProvider.AddService(() => mouseScrollHandler);
+                if (DesktopInterop.VirtualKeyboard != null)
+                    serviceProvider.AddService(() => DesktopInterop.VirtualKeyboard);
+
+                var tabletRef = Driver.InputDevices.FirstOrDefault()?.CreateReference();
+                var binding = store.Construct<IBinding>(serviceProvider, tabletRef);
+
+                if (binding == null)
+                    return;
+
+                var emptyReport = new DeviceReport(Array.Empty<byte>());
+
+                if (binding is PrecisionModeBinding precisionBinding)
+                {
+                    // For precision mode, toggle daemon precision state with configured sensitivity
+                    _isPrecisionModeActive = !_isPrecisionModeActive;
+                    Log.Write("PrecisionMode", $"HUD Precision mode toggled {(_isPrecisionModeActive ? "ON" : "OFF")}.");
+                    return;
+                }
+
+                if (binding is IStateBinding stateBinding)
+                {
+                    stateBinding.Press(tabletRef!, emptyReport);
+                    await Task.Delay(35);
+                    stateBinding.Release(tabletRef!, emptyReport);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex);
+            }
+        }
+
         public async Task ExecuteHudAction(HudAction action)
         {
             if (action == null) return;
@@ -981,6 +1049,24 @@ namespace OpenTabletDriver.Daemon
                         break;
                     case HudActionType.ShellCommand when !string.IsNullOrWhiteSpace(action.Value):
                         Process.Start(new ProcessStartInfo("/bin/bash", $"-c \"{action.Value.Replace("\"", "\\\"")}\"") { UseShellExecute = false });
+                        break;
+                    case HudActionType.Tool when !string.IsNullOrWhiteSpace(action.Value):
+                        var tool = Settings?.ContextualTools?.FindTool(action.Value);
+                        if (tool != null)
+                        {
+                            var winClass = CurrentWindowClass;
+                            var seq = tool.ResolveKeySequence(winClass);
+                            if (!string.IsNullOrWhiteSpace(seq))
+                            {
+                                var toolKeys = seq.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                                if (toolKeys.Length > 0 && DesktopInterop.VirtualKeyboard != null)
+                                {
+                                    DesktopInterop.VirtualKeyboard.Press(toolKeys);
+                                    await Task.Delay(25);
+                                    DesktopInterop.VirtualKeyboard.Release(toolKeys);
+                                }
+                            }
+                        }
                         break;
                 }
             }
@@ -1024,6 +1110,21 @@ namespace OpenTabletDriver.Daemon
             _isPrecisionModeActive = !_isPrecisionModeActive;
             Log.Write("PrecisionMode", $"Precision mode toggled {(_isPrecisionModeActive ? "ON" : "OFF")}.");
             return Task.CompletedTask;
+        }
+
+        public string? CurrentWindowClass => _appProfileMonitor?.CurrentWindowClass;
+        public string? CurrentWindowTitle => _appProfileMonitor?.CurrentWindowTitle;
+
+        public Task<string?> GetActiveWindowClass()
+        {
+            _appProfileMonitor?.ForceRefreshActiveWindow();
+            return Task.FromResult<string?>(_appProfileMonitor?.CurrentWindowClass);
+        }
+
+        public Task<string?> GetActiveWindowTitle()
+        {
+            _appProfileMonitor?.ForceRefreshActiveWindow();
+            return Task.FromResult<string?>(_appProfileMonitor?.CurrentWindowTitle);
         }
 
         private static async Task HandleMouseClick(string? button)

@@ -37,8 +37,10 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                                     new Group
                                                     {
                                                         Text = "Tip Binding",
+                                                        TitleWidth = 110,
+                                                        TitleVerticalAlignment = VerticalAlignment.Top,
                                                         Orientation = Orientation.Horizontal,
-                                                        ExpandContent = false,
+                                                        ExpandContent = true,
                                                         Content = tipButton = new BindingDisplay()
                                                     },
                                                     new UnitGroup
@@ -64,7 +66,9 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                                     new Group
                                                     {
                                                         Text = "Eraser Binding",
-                                                        ExpandContent = false,
+                                                        TitleWidth = 110,
+                                                        TitleVerticalAlignment = VerticalAlignment.Top,
+                                                        ExpandContent = true,
                                                         Orientation = Orientation.Horizontal,
                                                         Content = eraserButton = new BindingDisplay()
                                                     },
@@ -88,7 +92,14 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                             Text = "Pen Buttons",
                             Content = penButtons = new BindingDisplayList
                             {
-                                Prefix = "Pen Binding"
+                                Prefix = "Button",
+                                TitleWidth = 140,
+                                GetTitleFunc = index => index switch
+                                {
+                                    0 => "Button 1 (Lower)",
+                                    1 => "Button 2 (Upper)",
+                                    _ => $"Button {index + 1}"
+                                }
                             }
                         },
                         new Group {

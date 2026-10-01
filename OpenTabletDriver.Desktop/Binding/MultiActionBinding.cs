@@ -1,4 +1,5 @@
 using OpenTabletDriver.Plugin.Platform.Pointer;
+using OpenTabletDriver.Plugin.Platform.Keyboard;
 using System;
 using System.Linq;
 using System.Threading;
@@ -74,6 +75,12 @@ namespace OpenTabletDriver.Desktop.Binding
         [Resolved]
         public IDriverDaemon? Daemon { set; get; }
 
+        [Resolved]
+        public IActiveAppContext? AppContext { set; get; }
+
+        [Resolved]
+        public IVirtualKeyboard? Keyboard { set; get; }
+
         [TabletReference]
         public TabletReference? Tablet { set; get; }
 
@@ -82,6 +89,8 @@ namespace OpenTabletDriver.Desktop.Binding
         {
             var sm = new ServiceManager();
             if (Daemon != null) sm.AddService(() => Daemon);
+            if (AppContext != null) sm.AddService(() => AppContext);
+            if (Keyboard != null) sm.AddService(() => Keyboard);
             if (MouseButtonHandler != null) sm.AddService(() => MouseButtonHandler);
             if (MouseScrollHandler != null) sm.AddService(() => MouseScrollHandler);
             if (PenActionHandler != null) sm.AddService(() => PenActionHandler);

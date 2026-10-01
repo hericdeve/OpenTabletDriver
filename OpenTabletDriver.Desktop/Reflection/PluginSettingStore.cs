@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Attributes;
 using OpenTabletDriver.Plugin.DependencyInjection;
@@ -146,10 +148,169 @@ namespace OpenTabletDriver.Desktop.Reflection
 
         public string GetHumanReadableString()
         {
-            var name = Name;
-            string settings = string.Join(", ", this.Settings.Select(s => $"({s.Property}: {s.Value})"));
-            string suffix = Settings.Any() ? $": {settings}" : string.Empty;
-            return name + suffix;
+            var name = Name ?? Path?.Split('.').Last() ?? "Unknown";
+
+            // 1. MultiActionBinding
+            if (Path == "OpenTabletDriver.Desktop.Binding.MultiActionBinding")
+            {
+                var tap = GetNestedStore("TapAction");
+                var dbl = GetNestedStore("DoubleClickAction");
+                var hold = GetNestedStore("HoldAction");
+
+                var parts = new List<string>();
+                if (tap != null)
+                    parts.Add($"Tap: {FormatCompactAction(tap)}");
+                if (dbl != null)
+                    parts.Add($"Double: {FormatCompactAction(dbl)}");
+                if (hold != null)
+                    parts.Add($"Hold: {FormatCompactAction(hold)}");
+
+                if (parts.Count > 0)
+                    return $"Multi-Action: {string.Join(" • ", parts)}";
+                return "Multi-Action (Unconfigured)";
+            }
+
+            // 2. PrecisionModeBinding
+            if (Path == "OpenTabletDriver.Desktop.Binding.PrecisionModeBinding")
+            {
+                var sens = Settings.FirstOrDefault(s => s.Property == "Sensitivity")?.Value?.ToString() ?? "30";
+                var mode = Settings.FirstOrDefault(s => s.Property == "Mode")?.Value?.ToString() ?? "Hold";
+                var resetOnLift = Settings.FirstOrDefault(s => s.Property == "Reset on Lift")?.Value?.ToString();
+                if (string.Equals(resetOnLift, "false", StringComparison.OrdinalIgnoreCase))
+                    return $"Precision Mode: {sens}% ({mode}, Fixed Center)";
+                return $"Precision Mode: {sens}% ({mode})";
+            }
+
+            // 3. PanScrollBinding
+            if (Path == "OpenTabletDriver.Desktop.Binding.PanScrollBinding")
+            {
+                var sens = Settings.FirstOrDefault(s => s.Property == "Sensitivity")?.Value?.ToString() ?? "100";
+                var dir = Settings.FirstOrDefault(s => s.Property == "Direction")?.Value?.ToString();
+                return dir != null && dir != "Both" ? $"Pan / Scroll ({dir}, {sens}%)" : $"Pan / Scroll ({sens}%)";
+            }
+
+            // 4. ToolBinding
+            if (Path == "OpenTabletDriver.Desktop.Binding.ToolBinding")
+            {
+                var tool = Settings.FirstOrDefault(s => s.Property == "Tool")?.Value?.ToString() ?? "Tool";
+                var mode = Settings.FirstOrDefault(s => s.Property == "Mode")?.Value?.ToString() ?? "Hold";
+                return $"Tool Action: {tool} ({mode})";
+            }
+
+            // 4. MultiKeyBinding / KeyBinding
+            if (Path == "OpenTabletDriver.Desktop.Binding.MultiKeyBinding" || Path == "OpenTabletDriver.Desktop.Binding.KeyBinding")
+            {
+                var keys = Settings.FirstOrDefault(s => s.Property == "Keys" || s.Property == "Key")?.Value?.ToString();
+                if (!string.IsNullOrEmpty(keys))
+                    return $"Keystroke: {keys}";
+            }
+
+            // 5. MouseBinding
+            if (Path == "OpenTabletDriver.Desktop.Binding.MouseBinding")
+            {
+                var btn = Settings.FirstOrDefault(s => s.Property == "Button")?.Value?.ToString();
+                if (!string.IsNullOrEmpty(btn))
+                    return $"Mouse: {btn}";
+            }
+
+            // 6. Generic formatted fallback
+            var validSettings = Settings.Where(s => s.HasValue && s.Value != null).ToList();
+            if (validSettings.Count == 0)
+                return name;
+
+            var formattedSettings = string.Join(", ", validSettings.Select(s => $"{s.Property}: {FormatSettingValue(s)}"));
+            return $"{name} ({formattedSettings})";
+        }
+
+        public PluginSettingStore? GetNestedStore(string propertyName)
+        {
+            var setting = Settings.FirstOrDefault(s => s.Property == propertyName);
+            if (setting == null || !setting.HasValue || setting.Value == null)
+                return null;
+
+            if (setting.Value is JObject jObj && jObj["Path"] != null)
+            {
+                try
+                {
+                    return setting.GetValue<PluginSettingStore>();
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        public static string FormatCompactAction(PluginSettingStore? store)
+        {
+            if (store == null)
+                return "None";
+
+            // If it's a key binding, return the key string
+            var keys = store.Settings.FirstOrDefault(s => s.Property == "Keys" || s.Property == "Key")?.Value?.ToString();
+            if (!string.IsNullOrEmpty(keys))
+                return keys;
+
+            // If mouse button
+            var mouseBtn = store.Settings.FirstOrDefault(s => s.Property == "Button")?.Value?.ToString();
+            if (!string.IsNullOrEmpty(mouseBtn))
+                return $"{mouseBtn} Click";
+
+            // If precision mode
+            if (store.Path?.EndsWith("PrecisionModeBinding") == true)
+            {
+                var sens = store.Settings.FirstOrDefault(s => s.Property == "Sensitivity")?.Value?.ToString() ?? "30";
+                var mode = store.Settings.FirstOrDefault(s => s.Property == "Mode")?.Value?.ToString();
+                return mode != null ? $"Precision {sens}% ({mode})" : $"Precision {sens}%";
+            }
+
+            // If ToolBinding
+            if (store.Path?.EndsWith("ToolBinding") == true)
+            {
+                var tool = store.Settings.FirstOrDefault(s => s.Property == "Tool")?.Value?.ToString() ?? "Tool";
+                return $"Tool: {tool}";
+            }
+
+            // If PanScroll
+            if (store.Path?.EndsWith("PanScrollBinding") == true)
+                return "Pan/Scroll";
+
+            // If FloatingHud
+            if (store.Path?.EndsWith("FloatingHudBinding") == true)
+                return "HUD";
+
+            // Otherwise, friendly name or class name
+            return store.Name ?? store.Path?.Split('.').Last() ?? "Action";
+        }
+
+        private static string FormatSettingValue(PluginSetting s)
+        {
+            if (!s.HasValue || s.Value == null)
+                return "null";
+
+            if (s.Value is JObject jObj)
+            {
+                if (jObj["Path"] != null)
+                {
+                    try
+                    {
+                        var nested = s.GetValue<PluginSettingStore>();
+                        if (nested != null)
+                            return FormatCompactAction(nested);
+                    }
+                    catch
+                    {
+                    }
+                }
+                return jObj.ToString(Formatting.None);
+            }
+
+            if (s.Value is JArray jArr)
+                return jArr.ToString(Formatting.None);
+
+            return s.Value.ToString();
         }
 
         public TypeInfo? GetTypeInfo()

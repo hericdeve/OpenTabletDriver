@@ -50,6 +50,7 @@ namespace OpenTabletDriver.UX.Controls.Generic
 
         public Orientation Orientation { set; get; } = DEFAULT_ORIENTATION;
         public bool ExpandContent { set; get; } = true;
+        public int? TitleWidth { set; get; }
         public HorizontalAlignment TitleHorizontalAlignment { set; get; } = HorizontalAlignment.Left;
         public VerticalAlignment TitleVerticalAlignment { set; get; } = VerticalAlignment.Center;
 
@@ -89,7 +90,8 @@ namespace OpenTabletDriver.UX.Controls.Generic
                                     VerticalAlignment = TitleVerticalAlignment,
                                     Control = new Label
                                     {
-                                        Text = this.Text
+                                        Text = this.Text,
+                                        Width = this.TitleWidth ?? -1
                                     }
                                 },
                                 new StackLayoutItem(this.Content, ExpandContent)

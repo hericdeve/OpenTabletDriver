@@ -23,8 +23,16 @@ namespace OpenTabletDriver.UX
 
             Indicator.Activated += (_, _) =>
             {
-                window.Show();
-                window.BringToFront();
+                try
+                {
+                    if (!window.Visible)
+                        window.Show();
+                    window.BringToFront();
+                }
+                catch (Exception ex)
+                {
+                    Log.Exception(ex);
+                }
             };
         }
 
@@ -78,8 +86,16 @@ namespace OpenTabletDriver.UX
             };
             showWindow.Click += (sender, e) =>
             {
-                window.Show();
-                window.BringToFront();
+                try
+                {
+                    if (!window.Visible)
+                        window.Show();
+                    window.BringToFront();
+                }
+                catch (Exception ex)
+                {
+                    Log.Exception(ex);
+                }
             };
 
             var close = new ButtonMenuItem

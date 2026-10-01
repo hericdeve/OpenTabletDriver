@@ -1,5 +1,6 @@
 using System;
 using Eto.Forms;
+using OpenTabletDriver.Plugin;
 
 namespace OpenTabletDriver.UX.Windows
 {
@@ -26,18 +27,26 @@ namespace OpenTabletDriver.UX.Windows
         {
             var window = GetWindow();
 
-            switch (window)
+            try
             {
-                case DesktopForm desktopForm:
-                    desktopForm.Show();
-                    break;
-                case Form form:
-                    form.Show();
-                    form.Focus();
-                    break;
-                case Dialog dialog:
-                    dialog.ShowModal();
-                    break;
+                switch (window)
+                {
+                    case DesktopForm desktopForm:
+                        desktopForm.Show();
+                        break;
+                    case Form form:
+                        if (!form.Visible)
+                            form.Show();
+                        form.Focus();
+                        break;
+                    case Dialog dialog:
+                        dialog.ShowModal();
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex);
             }
         }
 
