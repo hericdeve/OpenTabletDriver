@@ -104,6 +104,13 @@ namespace OpenTabletDriver.Desktop.Binding
             _doubleClickBinding = DoubleClickAction?.Construct<IBinding>(sm, Tablet);
             _holdBinding = HoldAction?.Construct<IBinding>(sm, Tablet);
             _holdLiftBinding = HoldLiftAction?.Construct<IBinding>(sm, Tablet);
+
+            // If a lift action is configured, but no distinct hold binding was provided,
+            // the primary action (TapAction) is intended as the held action!
+            if (_holdBinding == null && _holdLiftBinding != null && _tapBinding != null)
+            {
+                _holdBinding = _tapBinding;
+            }
         }
 
         public bool IsActive => (_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { IsActive: true };
@@ -130,6 +137,12 @@ namespace OpenTabletDriver.Desktop.Binding
                         if (ShouldTriggerLiftOnPenLift() && !_liftActionFired)
                         {
                             _liftActionFired = true;
+
+                            // Release active hold binding first before evoking lift action
+                            (_holdBinding as IStateBinding)?.Release(tablet, report);
+                            _holdKeysDown = false;
+                            _holdActivated = false;
+
                             FireAction(_holdLiftBinding, tablet, report);
                         }
                     }
@@ -224,7 +237,28 @@ namespace OpenTabletDriver.Desktop.Binding
             oldHoldCts?.Dispose();
 
             if (newHoldCts != null && _holdBinding != null)
-                StartHoldTask(newHoldCts, tablet, report);
+            {
+                // When there is no double-click action and no conflicting separate tap action,
+                // activate hold immediately without delay for instantaneous response
+                bool isImmediateHold = _doubleClickBinding == null && (_tapBinding == null || ReferenceEquals(_tapBinding, _holdBinding));
+                if (isImmediateHold && _holdBinding is IStateBinding stateHold)
+                {
+                    lock (_stateLock)
+                    {
+                        if (_state == GestureState.FirstPressHeld)
+                        {
+                            _holdActivated = true;
+                            _holdKeysDown = true;
+                        }
+                    }
+                    _lastHoldActionFiredGlobal = DateTime.Now;
+                    stateHold.Press(tablet, _latestReport ?? report);
+                }
+                else
+                {
+                    StartHoldTask(newHoldCts, tablet, report);
+                }
+            }
         }
 
         public void Release(TabletReference tablet, IDeviceReport report)
@@ -254,7 +288,7 @@ namespace OpenTabletDriver.Desktop.Binding
                             postAction = () =>
                             {
                                 (_holdBinding as IStateBinding)?.Release(tablet, _latestReport ?? report);
-                                if (ShouldTriggerLiftOnButtonRelease() && !_liftActionFired)
+                                if (ShouldTriggerLiftOnRelease(_latestReport ?? report) && !_liftActionFired)
                                 {
                                     _liftActionFired = true;
                                     FireAction(_holdLiftBinding, tablet, _latestReport ?? report);
@@ -269,7 +303,7 @@ namespace OpenTabletDriver.Desktop.Binding
                             _state = GestureState.Idle;
                             postAction = () =>
                             {
-                                if (ShouldTriggerLiftOnButtonRelease() && !_liftActionFired)
+                                if (ShouldTriggerLiftOnRelease(_latestReport ?? report) && !_liftActionFired)
                                 {
                                     _liftActionFired = true;
                                     FireAction(_holdLiftBinding, tablet, _latestReport ?? report);
@@ -407,13 +441,23 @@ namespace OpenTabletDriver.Desktop.Binding
 
         // ── Helpers ───────────────────────────────────────────────────────────────
 
-        private bool ShouldTriggerLiftOnButtonRelease()
+        private bool ShouldTriggerLiftOnRelease(IDeviceReport? report)
         {
             if (HoldLiftAction == null)
                 return false;
 
-            return string.Equals(LiftTrigger, "Button Release", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(LiftTrigger, "Either", StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(LiftTrigger, "Button Release", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(LiftTrigger, "Either", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (string.Equals(LiftTrigger, "Pen Tip Lift", StringComparison.OrdinalIgnoreCase))
+            {
+                if (report is ITabletReport tabletReport)
+                    return tabletReport.Pressure == 0;
+                return true;
+            }
+
+            return false;
         }
 
         private bool ShouldTriggerLiftOnPenLift()

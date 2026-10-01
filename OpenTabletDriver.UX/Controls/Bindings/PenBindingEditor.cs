@@ -61,6 +61,16 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                                         ToolTip = "Secondary action executed when pressing firmly past the deep press threshold (e.g. Right Click, Floating HUD)",
                                                         Content = tipDeepPressButton = new BindingDisplay()
                                                     },
+                                                    new Group
+                                                    {
+                                                        Text = "Deep Press Lift Action",
+                                                        TitleWidth = 110,
+                                                        TitleVerticalAlignment = VerticalAlignment.Top,
+                                                        ExpandContent = true,
+                                                        Orientation = Orientation.Horizontal,
+                                                        ToolTip = "Optional action to evoke when lifting or releasing deep press (e.g. switch back to Pen / Brush mode)",
+                                                        Content = tipDeepPressLiftButton = new BindingDisplay()
+                                                    },
                                                     new UnitGroup
                                                     {
                                                         Text = "Deep Press Threshold",
@@ -195,6 +205,7 @@ namespace OpenTabletDriver.UX.Controls.Bindings
 
             tipButton.StoreBinding.Bind(SettingsBinding.Child(c => c.TipButton));
             tipDeepPressButton.StoreBinding.Bind(SettingsBinding.Child(c => c.TipDeepPressButton));
+            tipDeepPressLiftButton.StoreBinding.Bind(SettingsBinding.Child(c => c.TipDeepPressLiftButton));
             tipDeepPressThreshold.ValueBinding.Bind(SettingsBinding.Child(c => c.TipDeepPressThreshold));
             tipDeepPressDelay.ValueBinding.Bind(SettingsBinding.Child(c => c.TipDeepPressHoldDelayMs));
             tipDeepPressSuppressStroke.CheckedBinding.Cast<bool>().Bind(SettingsBinding.Child(c => c.TipDeepPressSuppressStroke));
@@ -209,7 +220,7 @@ namespace OpenTabletDriver.UX.Controls.Bindings
             enableDragBindings.CheckedBinding.Cast<bool>().Bind(SettingsBinding.Child(c => c.EnableDragBindings));
         }
 
-        private BindingDisplay tipButton, tipDeepPressButton, eraserButton;
+        private BindingDisplay tipButton, tipDeepPressButton, tipDeepPressLiftButton, eraserButton;
         private FloatSlider tipThreshold, tipDeepPressThreshold, tipDeepPressDelay, eraserThreshold;
         private CheckBox tipDeepPressSuppressStroke, disablePressure, uniformStrokePressure, disableTilt, disableRotation, enableDragBindings;
         private BindingDisplayList penButtons;

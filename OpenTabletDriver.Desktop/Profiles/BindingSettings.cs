@@ -28,6 +28,7 @@ namespace OpenTabletDriver.Desktop.Profiles
 
         private bool disablePressure, disableTilt, disableRotation, enableDragBindings;
         private PluginSettingStore? tipDeepPressButton;
+        private PluginSettingStore? tipDeepPressLiftButton;
         private float tipDeepPressThreshold = 80.0f;
         private float tipDeepPressHoldDelayMs = 60.0f;
         private bool tipDeepPressSuppressStroke = true;
@@ -52,6 +53,13 @@ namespace OpenTabletDriver.Desktop.Profiles
         {
             set => this.RaiseAndSetIfChanged(ref this.tipDeepPressButton, value);
             get => this.tipDeepPressButton;
+        }
+
+        [JsonProperty(nameof(TipDeepPressLiftButton))]
+        public PluginSettingStore? TipDeepPressLiftButton
+        {
+            set => this.RaiseAndSetIfChanged(ref this.tipDeepPressLiftButton, value);
+            get => this.tipDeepPressLiftButton;
         }
 
         [JsonProperty(nameof(TipDeepPressThreshold))]

@@ -506,7 +506,8 @@ namespace OpenTabletDriver.UX.Controls
             if (hasSecondary)
             {
                 var multi = EnsureMultiActionStore();
-                multi["HoldAction"].SetValue(holdStore);
+                var effectiveHoldStore = holdStore ?? (holdLiftStore != null ? (IsMultiAction(this.Store) ? this.Store!.GetNestedStore("TapAction") : this.Store) : null);
+                multi["HoldAction"].SetValue(effectiveHoldStore);
                 multi["HoldLiftAction"].SetValue(holdLiftStore);
                 multi["LiftTrigger"].SetValue(_liftTriggerDropDown.SelectedKey ?? "Button Release");
                 multi["DoubleClickAction"].SetValue(dblStore);
@@ -536,6 +537,10 @@ namespace OpenTabletDriver.UX.Controls
             {
                 multiStore["TapAction"].SetValue(this.Store);
             }
+            var holdStore = _holdDisplay?.Store ?? (_holdLiftDisplay?.Store != null ? this.Store : null);
+            multiStore["HoldAction"].SetValue(holdStore);
+            multiStore["HoldLiftAction"].SetValue(_holdLiftDisplay?.Store);
+            multiStore["DoubleClickAction"].SetValue(_doubleClickDisplay?.Store);
             float holdMs = _holdThresholdBox?.Value ?? 400f;
             float dblMs = _doubleClickWindowBox?.Value ?? 250f;
             multiStore["HoldThresholdMs"].SetValue(holdMs > 0 ? holdMs : 400f);

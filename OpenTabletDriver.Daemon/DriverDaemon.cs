@@ -600,6 +600,7 @@ namespace OpenTabletDriver.Daemon
                 var tipDeepPress = bindingHandler.TipDeepPress = new DeepPressBindingState
                 {
                     Binding = settings.TipDeepPressButton.Construct<IBinding>(bindingServiceProvider, tabletReference),
+                    LiftBinding = settings.TipDeepPressLiftButton?.Construct<IBinding>(bindingServiceProvider, tabletReference),
                     ActivationThreshold = settings.TipDeepPressThreshold,
                     HoldDelayMs = settings.TipDeepPressHoldDelayMs,
                     SuppressStroke = settings.TipDeepPressSuppressStroke
@@ -607,7 +608,8 @@ namespace OpenTabletDriver.Daemon
 
                 if (tipDeepPress.Binding != null)
                 {
-                    Log.Write(group, $"Tip Deep Press: [{tipDeepPress.Binding}]@{settings.TipDeepPressThreshold}% (Hold: {settings.TipDeepPressHoldDelayMs}ms, SuppressStroke: {settings.TipDeepPressSuppressStroke})");
+                    var liftInfo = tipDeepPress.LiftBinding != null ? $", Lift: [{tipDeepPress.LiftBinding}]" : "";
+                    Log.Write(group, $"Tip Deep Press: [{tipDeepPress.Binding}]@{settings.TipDeepPressThreshold}% (Hold: {settings.TipDeepPressHoldDelayMs}ms, SuppressStroke: {settings.TipDeepPressSuppressStroke}{liftInfo})");
                 }
             }
 

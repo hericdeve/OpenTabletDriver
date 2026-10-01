@@ -140,5 +140,44 @@ namespace OpenTabletDriver.Tests
             Assert.Equal(1, mockLift.PressCount);
             Assert.Equal(1, mockLift.ReleaseCount);
         }
+
+        [Fact]
+        public void MultiActionBinding_WhenHoldActionNull_AndLiftConfigured_UsesTapAsHoldImmediately()
+        {
+            typeof(MultiActionBinding).GetField("_lastHoldActionFiredGlobal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                .SetValue(null, DateTime.MinValue);
+
+            var tablet = CreateDummyTablet();
+            var binding = new MultiActionBinding
+            {
+                LiftTrigger = "Button Release"
+            };
+
+            var mockTapAsHold = new MockStateBinding();
+            var mockLift = new MockStateBinding();
+
+            binding.TapAction = new PluginSettingStore(typeof(MockStateBinding));
+            binding.HoldLiftAction = new PluginSettingStore(typeof(MockStateBinding));
+
+            typeof(MultiActionBinding).GetField("_tapBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(binding, mockTapAsHold);
+            typeof(MultiActionBinding).GetField("_holdBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(binding, mockTapAsHold);
+            typeof(MultiActionBinding).GetField("_holdLiftBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(binding, mockLift);
+
+            var report = new DummyTabletReport { Pressure = 2000 };
+
+            // Press should activate immediately (0 delay)
+            binding.Press(tablet, report);
+            Assert.Equal(1, mockTapAsHold.PressCount);
+            Assert.Equal(0, mockLift.PressCount);
+
+            // Release button
+            binding.Release(tablet, report);
+            Assert.Equal(1, mockTapAsHold.ReleaseCount);
+            Assert.Equal(1, mockLift.PressCount);
+            Assert.Equal(1, mockLift.ReleaseCount);
+        }
     }
 }

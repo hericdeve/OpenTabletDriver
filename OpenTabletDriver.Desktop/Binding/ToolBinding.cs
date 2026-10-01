@@ -153,8 +153,8 @@ namespace OpenTabletDriver.Desktop.Binding
                 _activeKeys = null;
             }
 
-            // If lift trigger is Button Release or Either, and lift action hasn't fired yet
-            if (ShouldTriggerLiftOnButtonRelease() && !_liftActionFired)
+            // If lift trigger is Button Release or Either (or Pen Tip Lift when tip is lifted), and lift action hasn't fired yet
+            if (ShouldTriggerLiftOnRelease(report) && !_liftActionFired)
             {
                 _liftActionFired = true;
                 FireLiftAction();
@@ -193,13 +193,23 @@ namespace OpenTabletDriver.Desktop.Binding
             }
         }
 
-        private bool ShouldTriggerLiftOnButtonRelease()
+        private bool ShouldTriggerLiftOnRelease(IDeviceReport report)
         {
             if (string.IsNullOrEmpty(OnLiftAction) || string.Equals(OnLiftAction, "None", StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            return string.Equals(LiftTrigger, "Button Release", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(LiftTrigger, "Either", StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(LiftTrigger, "Button Release", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(LiftTrigger, "Either", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (string.Equals(LiftTrigger, "Pen Tip Lift", StringComparison.OrdinalIgnoreCase))
+            {
+                if (report is ITabletReport tr)
+                    return tr.Pressure == 0;
+                return true;
+            }
+
+            return false;
         }
 
         private bool ShouldTriggerLiftOnPenLift()

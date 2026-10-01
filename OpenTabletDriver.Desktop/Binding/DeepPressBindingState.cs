@@ -11,6 +11,8 @@ namespace OpenTabletDriver.Desktop.Binding
         public float ReleaseHysteresis { get; set; } = 8.0f;
         public float HoldDelayMs { get; set; } = 60.0f;
         public bool SuppressStroke { get; set; } = true;
+        public IBinding? LiftBinding { get; set; }
+        public string LiftTrigger { get; set; } = "Pen Tip Lift";
 
         public bool IsDeepPressed { get; private set; }
         public bool IsPending { get; private set; }
@@ -25,7 +27,7 @@ namespace OpenTabletDriver.Desktop.Binding
         /// Duration in milliseconds to momentarily pulse tip touch to 0 upon entering deep press,
         /// ending any in-progress drawing stroke and allowing the target application to switch tools.
         /// </summary>
-        public const double ToolSwitchPulseDurationMs = 25.0;
+        public const double ToolSwitchPulseDurationMs = 30.0;
 
         /// <summary>
         /// Determines whether this binding represents a mouse click (such as Right Click context menu)
@@ -34,15 +36,15 @@ namespace OpenTabletDriver.Desktop.Binding
         /// </summary>
         public bool ShouldHoldTipSuppressed()
         {
-            if (Binding is MouseBinding mouseBinding)
+            if (Binding is MouseBinding)
             {
                 // Right click or middle click menus should not have tip clicking underneath them
                 return true;
             }
 
-            if (Binding is IPointerSuppressor)
+            if (Binding is IPointerSuppressor suppressor)
             {
-                return true;
+                return suppressor.SuppressTip;
             }
 
             return false;
@@ -88,15 +90,29 @@ namespace OpenTabletDriver.Desktop.Binding
 
                 if (IsDeepPressed)
                 {
-                    float releaseThreshold = Math.Max(0.0f, ActivationThreshold - ReleaseHysteresis);
-                    if (pressurePercent < releaseThreshold)
+                    bool hasLiftAction = LiftBinding != null || (Binding is MultiActionBinding multi && multi.HoldLiftAction != null);
+                    bool isPenTipLiftOnly = hasLiftAction && string.Equals(LiftTrigger, "Pen Tip Lift", StringComparison.OrdinalIgnoreCase);
+
+                    if (isPenTipLiftOnly)
                     {
-                        IsDeepPressed = false;
-                        base.Invoke(tablet, report, false);
+                        // When configured with a lift action (e.g. Eraser on deep press, Pen on lift),
+                        // keep the eraser active for the entire stroke until the stylus lifts off the screen.
+                        // This prevents fluctuating drawing pressure from prematurely cancelling the eraser.
+                        base.Invoke(tablet, report, true);
                     }
                     else
                     {
-                        base.Invoke(tablet, report, true);
+                        float releaseThreshold = Math.Max(0.0f, ActivationThreshold - ReleaseHysteresis);
+                        if (pressurePercent < releaseThreshold)
+                        {
+                            IsDeepPressed = false;
+                            base.Invoke(tablet, report, false);
+                            FireLiftBinding(tablet, report);
+                        }
+                        else
+                        {
+                            base.Invoke(tablet, report, true);
+                        }
                     }
                 }
 
@@ -163,12 +179,22 @@ namespace OpenTabletDriver.Desktop.Binding
             {
                 IsDeepPressed = false;
                 base.Invoke(tablet, report, false);
+                FireLiftBinding(tablet, report);
             }
 
             IsPending = false;
             LockTipUntilLift = false;
             _deepPressActivatedTimestamp = 0;
             _wasDrawingBeforeThreshold = false;
+        }
+
+        private void FireLiftBinding(TabletReference tablet, IDeviceReport report)
+        {
+            if (LiftBinding is IStateBinding stateLift)
+            {
+                stateLift.Press(tablet, report);
+                stateLift.Release(tablet, report);
+            }
         }
     }
 }

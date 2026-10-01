@@ -114,7 +114,7 @@ namespace OpenTabletDriver.Desktop.Binding
             {
                 _isActive = false;
 
-                if (ShouldTriggerLiftOnButtonRelease() && !_liftActionFired)
+                if (ShouldTriggerLiftOnRelease(report) && !_liftActionFired)
                 {
                     _liftActionFired = true;
                     FireAction(_onLiftBinding, tablet, report);
@@ -142,13 +142,23 @@ namespace OpenTabletDriver.Desktop.Binding
             }
         }
 
-        private bool ShouldTriggerLiftOnButtonRelease()
+        private bool ShouldTriggerLiftOnRelease(IDeviceReport report)
         {
             if (OnLiftAction == null)
                 return false;
 
-            return string.Equals(LiftTrigger, "Button Release", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(LiftTrigger, "Either", StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(LiftTrigger, "Button Release", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(LiftTrigger, "Either", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (string.Equals(LiftTrigger, "Pen Tip Lift", StringComparison.OrdinalIgnoreCase))
+            {
+                if (report is ITabletReport tr)
+                    return tr.Pressure == 0;
+                return true;
+            }
+
+            return false;
         }
 
         private bool ShouldTriggerLiftOnPenLift()

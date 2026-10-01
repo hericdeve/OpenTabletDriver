@@ -217,7 +217,8 @@ namespace OpenTabletDriver.Tests
                 ActivationThreshold = 80.0f,
                 ReleaseHysteresis = 10.0f, // Releases below 70%
                 HoldDelayMs = 0.0f, // Instant for this test
-                SuppressStroke = true
+                SuppressStroke = true,
+                LiftTrigger = "Pressure Release"
             };
 
             // Engage deep press at 85% (8192 * 0.85 ~= 6963)
@@ -295,6 +296,85 @@ namespace OpenTabletDriver.Tests
             };
             outputMode.Read(report2);
             Assert.Equal(0.0f, pointer.LastPressure);
+        }
+
+        [Fact]
+        public void DeepPress_WithLiftBinding_EvokesLiftBinding_OnPenLift()
+        {
+            var tablet = CreateDummyTablet();
+            var handler = new BindingHandler(tablet);
+
+            var tipBinding = new MockStateBinding();
+            var eraserBinding = new MockStateBinding();
+            var penModeBinding = new MockStateBinding();
+
+            handler.Tip = new ThresholdBindingState { Binding = tipBinding };
+            handler.TipDeepPress = new DeepPressBindingState
+            {
+                Binding = eraserBinding,
+                LiftBinding = penModeBinding,
+                ActivationThreshold = 80.0f,
+                HoldDelayMs = 0.0f,
+                SuppressStroke = true
+            };
+
+            // Touch down and push to 85% -> Deep press eraser activates!
+            handler.Consume(new DummyTabletReport { Pressure = 7000 });
+            Assert.True(eraserBinding.IsPressed);
+            Assert.Equal(1, eraserBinding.PressCount);
+            Assert.Equal(0, penModeBinding.PressCount);
+
+            // Pen lifts off digitizer (Pressure = 0)
+            handler.Consume(new DummyTabletReport { Pressure = 0 });
+
+            // Eraser releases, Pen mode evokes on lift!
+            Assert.False(eraserBinding.IsPressed);
+            Assert.Equal(1, eraserBinding.ReleaseCount);
+            Assert.Equal(1, penModeBinding.PressCount);
+            Assert.Equal(1, penModeBinding.ReleaseCount);
+        }
+
+        [Fact]
+        public void DeepPress_WithLiftBinding_EvokesLiftBinding_OnPressureDropBelowThreshold()
+        {
+            var tablet = CreateDummyTablet();
+            var handler = new BindingHandler(tablet);
+
+            var tipBinding = new MockStateBinding();
+            var eraserBinding = new MockStateBinding();
+            var penModeBinding = new MockStateBinding();
+
+            handler.Tip = new ThresholdBindingState { Binding = tipBinding };
+            handler.TipDeepPress = new DeepPressBindingState
+            {
+                Binding = eraserBinding,
+                LiftBinding = penModeBinding,
+                LiftTrigger = "Pressure Release",
+                ActivationThreshold = 80.0f,
+                ReleaseHysteresis = 10.0f, // Releases below 70%
+                HoldDelayMs = 0.0f,
+                SuppressStroke = true
+            };
+
+            // Touch down and push to 85% -> Deep press eraser activates!
+            handler.Consume(new DummyTabletReport { Pressure = 7000 });
+            Assert.True(eraserBinding.IsPressed);
+            Assert.Equal(1, eraserBinding.PressCount);
+            Assert.Equal(0, penModeBinding.PressCount);
+
+            // Ease up to 60% (below 70% threshold) while still touching tablet
+            handler.Consume(new DummyTabletReport { Pressure = 4900 });
+
+            // Eraser releases, Pen mode evokes!
+            Assert.False(eraserBinding.IsPressed);
+            Assert.Equal(1, eraserBinding.ReleaseCount);
+            Assert.Equal(1, penModeBinding.PressCount);
+            Assert.Equal(1, penModeBinding.ReleaseCount);
+
+            // Subsequent pen lift does not double-fire lift binding
+            handler.Consume(new DummyTabletReport { Pressure = 0 });
+            Assert.Equal(1, penModeBinding.PressCount);
+            Assert.Equal(1, penModeBinding.ReleaseCount);
         }
     }
 }
