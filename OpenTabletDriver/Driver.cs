@@ -294,7 +294,7 @@ namespace OpenTabletDriver
                 }
 
                 if (identifier_attributes.TryGetValue("FriendlyName", out var friendlyNamePattern) &&
-                    !Regex.IsMatch(device.FriendlyName, friendlyNamePattern))
+                    (device.FriendlyName == null || !Regex.IsMatch(device.FriendlyName, friendlyNamePattern)))
                 {
                     return false;
                 }

@@ -106,5 +106,14 @@ namespace OpenTabletDriver.UX.Gtk.Hud
 
             _box.ShowAll();
         }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _box?.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 }

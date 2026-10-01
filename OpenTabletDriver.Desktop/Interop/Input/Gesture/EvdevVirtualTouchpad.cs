@@ -9,7 +9,7 @@ using OpenTabletDriver.Plugin.Platform.Pointer;
 
 namespace OpenTabletDriver.Desktop.Interop.Input.Gesture
 {
-    public class EvdevVirtualTouchpad : IGestureHandler, IDisposable
+    public sealed class EvdevVirtualTouchpad : IGestureHandler, IDisposable
     {
         private const int MAX_X = 2000;
         private const int MAX_Y = 1500;

@@ -154,7 +154,7 @@ namespace OpenTabletDriver.Desktop
 
             using var sr = new StringReader(sw.ToString());
             using var jr = new JsonTextReader(sr);
-            return serializer.Deserialize<Settings>(jr);
+            return serializer.Deserialize<Settings>(jr)!;
         }
 
         #endregion

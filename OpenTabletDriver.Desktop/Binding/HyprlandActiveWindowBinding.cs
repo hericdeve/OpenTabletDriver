@@ -45,6 +45,11 @@ namespace OpenTabletDriver.Desktop.Binding
 
                 var settings = Daemon.GetSettings().GetAwaiter().GetResult();
                 var profile = settings.Profiles.GetProfile(tablet);
+                if (profile.AbsoluteModeSettings is not { } absoluteModeSettings)
+                {
+                    Log.Write(PLUGIN_NAME, $"Tablet '{tablet.Properties.Name}' is not configured for absolute mode.", LogLevel.Warning);
+                    return;
+                }
 
                 if (!_mappedToWindow)
                 {
@@ -61,7 +66,7 @@ namespace OpenTabletDriver.Desktop.Binding
                     var originOffset = GetHyprlandOriginOffset();
 
                     // Map to window
-                    profile.AbsoluteModeSettings.Display = new AreaSettings
+                    absoluteModeSettings.Display = new AreaSettings
                     {
                         Width = windowArea.Width,
                         Height = windowArea.Height,
@@ -84,11 +89,11 @@ namespace OpenTabletDriver.Desktop.Binding
                     var windowArea = GetActiveWindowArea();
                     if (windowArea != null && GetMonitorAreaSettings(windowArea.MonitorId) is AreaSettings displayArea)
                     {
-                        profile.AbsoluteModeSettings.Display = displayArea;
+                        absoluteModeSettings.Display = displayArea;
                     }
                     else
                     {
-                        profile.AbsoluteModeSettings.Display = AreaSettings.GetDefaults(VirtualScreen);
+                        absoluteModeSettings.Display = AreaSettings.GetDefaults(VirtualScreen);
                     }
 
                     _mappedToWindow = false;

@@ -127,15 +127,23 @@ namespace OpenTabletDriver.Desktop.Binding
 
         public void Dispose()
         {
-            if (_timer != null)
-            {
-                _timer.Stop();
-                _timer.Elapsed -= OnTimerElapsed;
-                _timer.Dispose();
-                _timer = null;
-            }
-            GestureHandler?.EndGesture();
+            Dispose(true);
             GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (_timer != null)
+                {
+                    _timer.Stop();
+                    _timer.Elapsed -= OnTimerElapsed;
+                    _timer.Dispose();
+                    _timer = null;
+                }
+                GestureHandler?.EndGesture();
+            }
         }
     }
 

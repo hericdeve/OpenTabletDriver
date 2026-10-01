@@ -233,13 +233,21 @@ namespace OpenTabletDriver.UX.Controls
             {
                 if (args.PropertyName == nameof(App.Settings) && App.Current.Settings?.Hud != null)
                 {
-                    Application.Instance.AsyncInvoke(() => LoadSettings(App.Current.Settings.Hud));
+                    Application.Instance.AsyncInvoke(() => LoadSettings(App.Current.Settings?.Hud));
                 }
             };
         }
 
-        private HudConfiguration CurrentConfig =>
-            App.Current.Settings?.Hud ?? (App.Current.Settings.Hud = HudConfiguration.GetDefaults());
+        private static HudConfiguration CurrentConfig
+        {
+            get
+            {
+                if (App.Current.Settings is { } settings)
+                    return settings.Hud ??= HudConfiguration.GetDefaults();
+
+                return HudConfiguration.GetDefaults();
+            }
+        }
 
         public void LoadSettings(HudConfiguration? config)
         {

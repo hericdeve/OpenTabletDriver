@@ -20,14 +20,18 @@ namespace OpenTabletDriver.UX
             };
 
             RefreshMenuItems();
+            Indicator.Show();
 
             Indicator.Activated += (_, _) =>
             {
                 try
                 {
+                    if (window.WindowState == WindowState.Minimized)
+                        window.WindowState = WindowState.Normal;
                     if (!window.Visible)
                         window.Show();
                     window.BringToFront();
+                    window.Focus();
                 }
                 catch (Exception ex)
                 {
@@ -88,9 +92,12 @@ namespace OpenTabletDriver.UX
             {
                 try
                 {
+                    if (window.WindowState == WindowState.Minimized)
+                        window.WindowState = WindowState.Normal;
                     if (!window.Visible)
                         window.Show();
                     window.BringToFront();
+                    window.Focus();
                 }
                 catch (Exception ex)
                 {
@@ -112,7 +119,16 @@ namespace OpenTabletDriver.UX
                 // Applications on macOS will keep running even after closing all their windows
                 // Offering a way to quit the app here is more idiomatic
                 close.Text = "Quit";
-                close.Click += (sender, e) => Application.Instance.Quit();
+                close.Click += (sender, e) => App.Exit();
+            }
+            else if (DesktopInterop.CurrentPlatform == PluginPlatform.Linux)
+            {
+                showWindow.Text = "Open OpenTabletDriver";
+
+                // On Linux, closing the window hides it to background to keep services (Floating HUD) active.
+                // Offering a Quit action allows exiting the background app cleanly.
+                close.Text = "Quit";
+                close.Click += (sender, e) => App.Exit();
             }
 
             var items = new List<MenuItem>();

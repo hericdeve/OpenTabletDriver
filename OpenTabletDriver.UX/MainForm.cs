@@ -175,28 +175,35 @@ namespace OpenTabletDriver.UX
 
             if (App.EnableTrayIcon)
             {
-                trayIcon = new TrayIcon(this);
-                if (WindowState == WindowState.Minimized)
+                try
                 {
-                    this.Visible = false;
-                    this.ShowInTaskbar = false;
-                }
-                this.WindowStateChanged += (sender, e) =>
-                {
-                    switch (this.WindowState)
+                    trayIcon = new TrayIcon(this);
+                    if (WindowState == WindowState.Minimized)
                     {
-                        case WindowState.Normal:
-                        case WindowState.Maximized:
-                            this.Visible = true;
-                            this.ShowInTaskbar = true;
-                            break;
-                        case WindowState.Minimized:
-                            this.Visible = false;
-                            this.ShowInTaskbar = false;
-                            break;
+                        this.Visible = false;
+                        this.ShowInTaskbar = false;
                     }
-                };
-                Application.Instance.Terminating += (sender, e) => trayIcon.Dispose();
+                    this.WindowStateChanged += (sender, e) =>
+                    {
+                        switch (this.WindowState)
+                        {
+                            case WindowState.Normal:
+                            case WindowState.Maximized:
+                                this.Visible = true;
+                                this.ShowInTaskbar = true;
+                                break;
+                            case WindowState.Minimized:
+                                this.Visible = false;
+                                this.ShowInTaskbar = false;
+                                break;
+                        }
+                    };
+                    Application.Instance.Terminating += (sender, e) => trayIcon.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("TrayIcon", $"Failed to initialize system tray: {ex.Message}", LogLevel.Warning);
+                }
             }
 
             if (App.EnableDaemonWatchdog)
@@ -233,7 +240,7 @@ namespace OpenTabletDriver.UX
         private static MenuBar ConstructLimitedMenu()
         {
             var quitCommand = new Command { MenuText = "Quit", Shortcut = Application.Instance.CommonModifier | Keys.Q };
-            quitCommand.Executed += (sender, e) => Application.Instance.Quit();
+            quitCommand.Executed += (sender, e) => App.Exit();
 
             var aboutCommand = new Command { MenuText = "About...", Shortcut = Keys.F1 };
             aboutCommand.Executed += (sender, e) => App.Current.AboutWindow.Show();
@@ -264,7 +271,7 @@ namespace OpenTabletDriver.UX
         private MenuBar ConstructMenu()
         {
             var quitCommand = new Command { MenuText = "Quit", Shortcut = Application.Instance.CommonModifier | Keys.Q };
-            quitCommand.Executed += (sender, e) => Application.Instance.Quit();
+            quitCommand.Executed += (sender, e) => App.Exit();
 
             var aboutCommand = new Command { MenuText = "About...", Shortcut = Keys.F1 };
             aboutCommand.Executed += (sender, e) => App.Current.AboutWindow.Show();

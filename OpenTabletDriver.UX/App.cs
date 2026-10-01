@@ -96,11 +96,17 @@ namespace OpenTabletDriver.UX
 
             app.NotificationActivated += Current.HandleNotification;
             app.UnhandledException += ShowUnhandledException;
-            app.Terminating += async (sender, args) =>
+            app.Terminating += (sender, args) =>
             {
                 IsTerminating = true;
                 Terminating?.Invoke();
-                await Current.Canceler.CancelAsync();
+                try
+                {
+                    Current.Canceler.Cancel();
+                }
+                catch
+                {
+                }
             };
 
             Task.Run(async () =>
@@ -224,7 +230,7 @@ namespace OpenTabletDriver.UX
         }
 
         private const string APPNAME = "OpenTabletDriver.UX";
-        public readonly static bool EnableTrayIcon = (PluginPlatform.Windows | PluginPlatform.MacOS).HasFlag(SystemInterop.CurrentPlatform);
+        public readonly static bool EnableTrayIcon = (PluginPlatform.Windows | PluginPlatform.MacOS | PluginPlatform.Linux).HasFlag(SystemInterop.CurrentPlatform);
         public readonly static bool EnableDaemonWatchdog = (PluginPlatform.Windows | PluginPlatform.MacOS).HasFlag(SystemInterop.CurrentPlatform);
         public static DaemonWatchdog DaemonWatchdog;
 
@@ -256,6 +262,29 @@ namespace OpenTabletDriver.UX
             }
 
             CloseAuxiliaryWindows();
+        }
+
+        public static event Action? RequestQuit;
+
+        public static void Exit()
+        {
+            IsTerminating = true;
+            Terminating?.Invoke();
+            try
+            {
+                Current?.Canceler?.Cancel();
+            }
+            catch
+            {
+            }
+            RequestQuit?.Invoke();
+            try
+            {
+                Application.Instance?.AsyncInvoke(() => Application.Instance?.Quit());
+            }
+            catch
+            {
+            }
         }
 
         private void CloseAuxiliaryWindows()
