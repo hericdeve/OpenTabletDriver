@@ -146,6 +146,8 @@ namespace OpenTabletDriver.Desktop.Reflection
             get => this[property.Name];
         }
 
+        public override string ToString() => GetHumanReadableString();
+
         public string GetHumanReadableString()
         {
             var name = Name ?? Path?.Split('.').Last() ?? "Unknown";
@@ -157,6 +159,7 @@ namespace OpenTabletDriver.Desktop.Reflection
                 var dbl = GetNestedStore("DoubleClickAction");
                 var hold = GetNestedStore("HoldAction");
                 var lift = GetNestedStore("HoldLiftAction");
+                var deep = GetNestedStore("DeepClickAction");
 
                 var parts = new List<string>();
                 if (tap != null)
@@ -167,9 +170,11 @@ namespace OpenTabletDriver.Desktop.Reflection
                     parts.Add($"Hold: {FormatCompactAction(hold)}");
                 if (lift != null)
                     parts.Add($"Lift: {FormatCompactAction(lift)}");
+                if (deep != null)
+                    parts.Add($"Deep: {FormatCompactAction(deep)}");
 
                 if (parts.Count > 0)
-                    return $"Multi-Action: {string.Join(" • ", parts)}";
+                    return string.Join(" • ", parts);
                 return "Multi-Action (Unconfigured)";
             }
 
@@ -199,11 +204,7 @@ namespace OpenTabletDriver.Desktop.Reflection
             if (Path == "OpenTabletDriver.Desktop.Binding.ToolBinding")
             {
                 var tool = Settings.FirstOrDefault(s => s.Property == "Tool")?.Value?.ToString() ?? "Tool";
-                var mode = Settings.FirstOrDefault(s => s.Property == "Mode")?.Value?.ToString() ?? "Hold";
-                var lift = Settings.FirstOrDefault(s => s.Property == "On Lift Action" || s.Property == "OnLiftAction")?.Value?.ToString();
-                if (!string.IsNullOrEmpty(lift) && !string.Equals(lift, "None", StringComparison.OrdinalIgnoreCase))
-                    return $"Tool Action: {tool} ({mode}, Lift: {lift})";
-                return $"Tool Action: {tool} ({mode})";
+                return $"Tool Action: {tool}";
             }
 
             // 4. MultiKeyBinding / KeyBinding

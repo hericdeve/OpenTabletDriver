@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Threading.Tasks;
 using OpenTabletDriver.Desktop.Binding;
 using OpenTabletDriver.Desktop.Contracts;
+using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.Desktop.Tools;
+using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Platform.Keyboard;
 using OpenTabletDriver.Plugin.Tablet;
 using Xunit;
@@ -12,27 +15,30 @@ namespace OpenTabletDriver.Tests
 {
     public class ToolBindingTests
     {
-        private class MockAppContext : IActiveAppContext
-        {
-            public string? CurrentWindowClass { get; set; }
-            public string? CurrentWindowTitle { get; set; }
-        }
-
         private class MockVirtualKeyboard : IVirtualKeyboard
         {
             public List<string> PressedKeys { get; } = new();
             public List<string> ReleasedKeys { get; } = new();
-
-            public IEnumerable<string> SupportedKeys => new[]
-            {
-                "A", "B", "E", "H", "P", "R", "S", "T", "V", "Z", "Space", "Alt", "Control", "Shift"
-            };
+            public IEnumerable<string> SupportedKeys => new[] { "E", "B", "P", "H", "V", "Control", "Shift", "Alt" };
 
             public void Press(string key) => PressedKeys.Add(key);
-            public void Release(string key) => ReleasedKeys.Add(key);
-
             public void Press(IEnumerable<string> keys) => PressedKeys.AddRange(keys);
+            public void Release(string key) => ReleasedKeys.Add(key);
             public void Release(IEnumerable<string> keys) => ReleasedKeys.AddRange(keys);
+            public void Set(string key, bool state) { }
+            public void Set(IEnumerable<string> keys, bool state) { }
+        }
+
+        private class MockAppContext : IActiveAppContext
+        {
+            public string? CurrentWindowClass { get; set; }
+            public string? CurrentWindowTitle { get; set; }
+
+            public void SetWindow(string windowClass, string windowTitle)
+            {
+                CurrentWindowClass = windowClass;
+                CurrentWindowTitle = windowTitle;
+            }
         }
 
         private static TabletReference CreateDummyTablet()
@@ -45,18 +51,8 @@ namespace OpenTabletDriver.Tests
                     DigitizerIdentifiers = [],
                     Specifications = new TabletSpecifications
                     {
-                        Pen = new PenSpecifications
-                        {
-                            ButtonCount = 2,
-                            MaxPressure = 8192
-                        },
-                        Digitizer = new DigitizerSpecifications
-                        {
-                            Width = 1000,
-                            Height = 1000,
-                            MaxX = 1000,
-                            MaxY = 1000
-                        }
+                        Pen = new PenSpecifications { ButtonCount = 2, MaxPressure = 8192 },
+                        Digitizer = new DigitizerSpecifications { Width = 1000, Height = 1000, MaxX = 1000, MaxY = 1000 }
                     }
                 }
             };
@@ -74,18 +70,14 @@ namespace OpenTabletDriver.Tests
                 Keyboard = keyboard,
                 AppContext = appContext,
                 CustomConfiguration = new ContextualToolsConfiguration { Tools = config },
-                Tool = "Eraser",
-                Mode = "Hold"
+                Tool = "Eraser"
             };
 
             var tablet = CreateDummyTablet();
             binding.Press(tablet, null!);
 
-            // Eraser default is "E"
+            // Eraser default is "E" - Tool Action executes as instantaneous click
             Assert.Contains("E", keyboard.PressedKeys);
-            Assert.Empty(keyboard.ReleasedKeys);
-
-            binding.Release(tablet, null!);
             Assert.Contains("E", keyboard.ReleasedKeys);
         }
 
@@ -101,8 +93,7 @@ namespace OpenTabletDriver.Tests
                 Keyboard = keyboard,
                 AppContext = appContext,
                 CustomConfiguration = new ContextualToolsConfiguration { Tools = config },
-                Tool = "Eraser",
-                Mode = "Hold"
+                Tool = "Eraser"
             };
 
             var tablet = CreateDummyTablet();
@@ -113,14 +104,13 @@ namespace OpenTabletDriver.Tests
             Assert.Contains("Control", keyboard.PressedKeys);
             Assert.Contains("E", keyboard.PressedKeys);
 
-            binding.Release(tablet, null!);
             Assert.Contains("Shift", keyboard.ReleasedKeys);
             Assert.Contains("Control", keyboard.ReleasedKeys);
             Assert.Contains("E", keyboard.ReleasedKeys);
         }
 
         [Fact]
-        public void ToolBinding_TapMode_PressesAndReleasesImmediatelyOnPress()
+        public void ToolBinding_PressesAndReleasesImmediatelyOnPress()
         {
             var keyboard = new MockVirtualKeyboard();
             var appContext = new MockAppContext { CurrentWindowClass = "obsidian" };
@@ -131,8 +121,7 @@ namespace OpenTabletDriver.Tests
                 Keyboard = keyboard,
                 AppContext = appContext,
                 CustomConfiguration = new ContextualToolsConfiguration { Tools = config },
-                Tool = "Selection", // Obsidian override is "V"
-                Mode = "Tap / Toggle"
+                Tool = "Selection" // Obsidian override is "V"
             };
 
             var tablet = CreateDummyTablet();
@@ -169,8 +158,7 @@ namespace OpenTabletDriver.Tests
                 Keyboard = keyboard,
                 AppContext = appContext,
                 CustomConfiguration = customConfig,
-                Tool = "Highlighter",
-                Mode = "Hold"
+                Tool = "Highlighter"
             };
 
             var tablet = CreateDummyTablet();
@@ -179,6 +167,10 @@ namespace OpenTabletDriver.Tests
             Assert.Contains("Shift", keyboard.PressedKeys);
             Assert.Contains("Control", keyboard.PressedKeys);
             Assert.Contains("H", keyboard.PressedKeys);
+
+            Assert.Contains("Shift", keyboard.ReleasedKeys);
+            Assert.Contains("Control", keyboard.ReleasedKeys);
+            Assert.Contains("H", keyboard.ReleasedKeys);
         }
 
         [Fact]
@@ -230,91 +222,6 @@ namespace OpenTabletDriver.Tests
             Assert.Equal("brush", config.Tools[0].Id);
             Assert.Single(config.Tools[0].AppOverrides);
             Assert.Equal("eraser", config.Tools[1].Id);
-        }
-
-        private class DummyTabletReport : IAbsolutePositionReport, ITabletReport
-        {
-            public Vector2 Position { get; set; }
-            public uint Pressure { get; set; }
-            public Vector2 Tilt { get; set; }
-            public bool[] PenButtons { get; set; } = new bool[2];
-            public byte[] Raw { get; set; } = Array.Empty<byte>();
-        }
-
-        [Fact]
-        public void ToolBinding_HoldMode_WithLiftAction_TriggersOnButtonRelease()
-        {
-            var keyboard = new MockVirtualKeyboard();
-            var appContext = new MockAppContext { CurrentWindowClass = "xournalpp" };
-            var config = ContextualToolsConfiguration.GetDefaultTools();
-
-            var binding = new ToolBinding
-            {
-                Keyboard = keyboard,
-                AppContext = appContext,
-                CustomConfiguration = new ContextualToolsConfiguration { Tools = config },
-                Tool = "Eraser", // in xournalpp, override is Shift+Control+E
-                Mode = "Hold",
-                OnLiftAction = "Brush / Pen", // in xournalpp, override is P
-                LiftTrigger = "Button Release"
-            };
-
-            var tablet = CreateDummyTablet();
-            var report = new DummyTabletReport { Pressure = 2000 };
-
-            // Press hold button
-            binding.Press(tablet, report);
-            Assert.Contains("Shift", keyboard.PressedKeys);
-            Assert.Contains("Control", keyboard.PressedKeys);
-            Assert.Contains("E", keyboard.PressedKeys);
-            Assert.DoesNotContain("P", keyboard.PressedKeys);
-
-            // Release button -> Eraser released, Pen evoked (pressed then released)
-            binding.Release(tablet, report);
-            Assert.Contains("E", keyboard.ReleasedKeys);
-            Assert.Contains("P", keyboard.PressedKeys);
-            Assert.Contains("P", keyboard.ReleasedKeys);
-        }
-
-        [Fact]
-        public void ToolBinding_HoldMode_WithLiftAction_TriggersOnPenTipLift()
-        {
-            var keyboard = new MockVirtualKeyboard();
-            var appContext = new MockAppContext { CurrentWindowClass = "xournalpp" };
-            var config = ContextualToolsConfiguration.GetDefaultTools();
-
-            var binding = new ToolBinding
-            {
-                Keyboard = keyboard,
-                AppContext = appContext,
-                CustomConfiguration = new ContextualToolsConfiguration { Tools = config },
-                Tool = "Eraser",
-                Mode = "Hold",
-                OnLiftAction = "Brush / Pen",
-                LiftTrigger = "Pen Tip Lift"
-            };
-
-            var tablet = CreateDummyTablet();
-            var downReport = new DummyTabletReport { Pressure = 3000 };
-
-            // Press while drawing (tip is down)
-            binding.Press(tablet, downReport);
-            Assert.Contains("E", keyboard.PressedKeys);
-            Assert.DoesNotContain("P", keyboard.PressedKeys);
-
-            // While button remains held, pen tip lifts off tablet (Pressure = 0)
-            var upReport = new DummyTabletReport { Pressure = 0 };
-            binding.Update(tablet, upReport);
-
-            // Lift action fires immediately on pen lift: Eraser released, Pen evoked
-            Assert.Contains("E", keyboard.ReleasedKeys);
-            Assert.Contains("P", keyboard.PressedKeys);
-            Assert.Contains("P", keyboard.ReleasedKeys);
-
-            // Subsequent button release does not double-fire the lift action
-            int pCount = keyboard.PressedKeys.FindAll(k => k == "P").Count;
-            binding.Release(tablet, upReport);
-            Assert.Equal(pCount, keyboard.PressedKeys.FindAll(k => k == "P").Count);
         }
     }
 }

@@ -38,6 +38,7 @@ namespace OpenTabletDriver.UX.Controls.Generic.Reflection
         protected override IEnumerable<object> CreateDefaultDataStore()
         {
             var query = from type in AppInfo.PluginManager.GetChildTypes<T>()
+                        where type.FullName != "OpenTabletDriver.Desktop.Binding.MultiActionBinding"
                         orderby type.GetFriendlyName()
                         select type;
             return query.ToList();

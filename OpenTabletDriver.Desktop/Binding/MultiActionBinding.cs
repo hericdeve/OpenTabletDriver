@@ -25,6 +25,8 @@ namespace OpenTabletDriver.Desktop.Binding
         private IBinding? _doubleClickBinding;
         private IBinding? _holdBinding;
         private IBinding? _holdLiftBinding;
+        private DeepPressBindingState? _deepPressState;
+        private bool _deepPressSuppressTip;
         private IDeviceReport? _latestReport;
         private bool _wasTipDown;
         private bool _liftActionFired;
@@ -111,19 +113,41 @@ namespace OpenTabletDriver.Desktop.Binding
             {
                 _holdBinding = _tapBinding;
             }
+
+            if (DeepClickAction != null)
+            {
+                _deepPressState = new DeepPressBindingState
+                {
+                    Binding = DeepClickAction.Construct<IBinding>(sm, Tablet),
+                    LiftBinding = DeepClickLiftAction?.Construct<IBinding>(sm, Tablet),
+                    ActivationThreshold = DeepClickThreshold,
+                    HoldDelayMs = DeepClickHoldDelayMs,
+                    SuppressStroke = DeepClickSuppressStroke
+                };
+            }
         }
 
-        public bool IsActive => (_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { IsActive: true };
+        public bool IsActive => ((_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { IsActive: true }) ||
+                                (_deepPressState != null && _deepPressState.IsDeepPressed);
         public bool SuppressMotion => (_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { SuppressMotion: true };
-        public bool SuppressTip => (_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { SuppressTip: true };
+        public bool SuppressTip => ((_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { SuppressTip: true }) ||
+                                   (_deepPressState != null && _deepPressState.IsDeepPressed && DeepClickSuppressStroke) ||
+                                   _deepPressSuppressTip;
 
         public void Update(TabletReference tablet, IDeviceReport report)
         {
             _latestReport = report;
 
+            if (_deepPressState != null && report is ITabletReport tr)
+            {
+                float maxPressure = tablet?.Properties?.Specifications?.Pen?.MaxPressure ?? 8192f;
+                float pressurePercent = maxPressure > 0 ? ((float)tr.Pressure / maxPressure * 100f) : 0f;
+                _deepPressState.ProcessReport(tablet!, report, pressurePercent, out _deepPressSuppressTip);
+            }
+
             if ((_holdKeysDown || _holdActivated) && _holdBinding is IContinuousBinding continuous)
             {
-                continuous.Update(tablet, report);
+                continuous.Update(tablet!, report);
             }
 
             if (_holdKeysDown || _holdActivated)
@@ -139,11 +163,11 @@ namespace OpenTabletDriver.Desktop.Binding
                             _liftActionFired = true;
 
                             // Release active hold binding first before evoking lift action
-                            (_holdBinding as IStateBinding)?.Release(tablet, report);
+                            (_holdBinding as IStateBinding)?.Release(tablet!, report);
                             _holdKeysDown = false;
                             _holdActivated = false;
 
-                            FireAction(_holdLiftBinding, tablet, report);
+                            FireAction(_holdLiftBinding, tablet!, report);
                         }
                     }
                     _wasTipDown = isTipDown;
@@ -180,6 +204,26 @@ namespace OpenTabletDriver.Desktop.Binding
         [SliderProperty("Double-Click Window (ms)", 50f, 800f, 250f)]
         [Unit("ms")]
         public float DoubleClickWindowMs { get; set; } = 250f;
+
+        [Property("Deep-Click Action")]
+        [ToolTip("Action to fire when pressure exceeds the deep-click threshold.")]
+        public PluginSettingStore? DeepClickAction { get; set; }
+
+        [Property("Deep-Click Lift Action")]
+        [ToolTip("Optional action to evoke on lift after deep-click.")]
+        public PluginSettingStore? DeepClickLiftAction { get; set; }
+
+        [SliderProperty("Deep-Click Threshold (%)", 50f, 98f, 80f)]
+        [Unit("%")]
+        public float DeepClickThreshold { get; set; } = 80f;
+
+        [SliderProperty("Deep-Click Hold Delay (ms)", 0f, 300f, 60f)]
+        [Unit("ms")]
+        public float DeepClickHoldDelayMs { get; set; } = 60f;
+
+        [Property("Deep-Click Suppress Stroke")]
+        [ToolTip("Suppresses standard drawing stroke during deep click.")]
+        public bool DeepClickSuppressStroke { get; set; } = true;
 
         public static IEnumerable<string> ValidLiftTriggers => _validLiftTriggers;
 
@@ -341,6 +385,12 @@ namespace OpenTabletDriver.Desktop.Binding
             holdCtsToCancel?.Dispose();
             _lastReleaseTime = DateTime.Now;
             postAction?.Invoke();
+
+            if (_deepPressState != null)
+            {
+                _deepPressState.Reset(tablet, _latestReport ?? report);
+                _deepPressSuppressTip = false;
+            }
         }
 
         // ── Background tasks ─────────────────────────────────────────────────────
@@ -481,7 +531,8 @@ namespace OpenTabletDriver.Desktop.Binding
         public override string ToString()
         {
             var liftStr = HoldLiftAction != null ? $" lift={HoldLiftAction.Name ?? "Set"}" : "";
-            return $"{PLUGIN_NAME}: tap={TapAction?.Name ?? "None"} dbl={DoubleClickAction?.Name ?? "None"} hold={HoldAction?.Name ?? "None"}{liftStr}";
+            var deepStr = DeepClickAction != null ? $" deep={DeepClickAction.Name ?? "Set"}@{DeepClickThreshold}%" : "";
+            return $"{PLUGIN_NAME}: tap={TapAction?.Name ?? "None"} dbl={DoubleClickAction?.Name ?? "None"} hold={HoldAction?.Name ?? "None"}{liftStr}{deepStr}";
         }
     }
 }

@@ -179,5 +179,73 @@ namespace OpenTabletDriver.Tests
             Assert.Equal(1, mockLift.PressCount);
             Assert.Equal(1, mockLift.ReleaseCount);
         }
+
+        [Fact]
+        public void MultiActionBinding_DeepClick_ActivatesAndSuppressesStroke()
+        {
+            var tablet = CreateDummyTablet();
+            var binding = new MultiActionBinding
+            {
+                DeepClickThreshold = 80f,
+                DeepClickHoldDelayMs = 0f,
+                DeepClickSuppressStroke = true
+            };
+
+            var mockTap = new MockStateBinding();
+            var mockDeep = new MockStateBinding();
+            var mockDeepLift = new MockStateBinding();
+
+            binding.TapAction = new PluginSettingStore(typeof(MockStateBinding));
+            binding.DeepClickAction = new PluginSettingStore(typeof(MockStateBinding));
+            binding.DeepClickLiftAction = new PluginSettingStore(typeof(MockStateBinding));
+
+            var deepPressState = new DeepPressBindingState
+            {
+                Binding = mockDeep,
+                LiftBinding = mockDeepLift,
+                ActivationThreshold = 80f,
+                HoldDelayMs = 0f,
+                SuppressStroke = true
+            };
+
+            typeof(MultiActionBinding).GetField("_tapBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(binding, mockTap);
+            typeof(MultiActionBinding).GetField("_deepPressState", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(binding, deepPressState);
+
+            // Report below threshold: 4000 / 8192 ~= 48.8%
+            var lowReport = new DummyTabletReport { Pressure = 4000 };
+            binding.Update(tablet, lowReport);
+            Assert.Equal(0, mockDeep.PressCount);
+            Assert.False(binding.SuppressTip);
+
+            // Report above threshold: 7000 / 8192 ~= 85.4%
+            var highReport = new DummyTabletReport { Pressure = 7000 };
+            binding.Update(tablet, highReport);
+            Assert.Equal(1, mockDeep.PressCount);
+            Assert.True(binding.SuppressTip);
+
+            // Pen lifts: pressure drops to 0
+            var liftReport = new DummyTabletReport { Pressure = 0 };
+            binding.Update(tablet, liftReport);
+            Assert.Equal(1, mockDeep.ReleaseCount);
+            Assert.Equal(1, mockDeepLift.ReleaseCount);
+            Assert.False(binding.SuppressTip);
+        }
+
+        [Fact]
+        public void PluginSettingStore_FormatsMultiAction_WithDeepClickFriendlyString()
+        {
+            var store = new PluginSettingStore(typeof(MultiActionBinding));
+            var tapStore = new PluginSettingStore(typeof(MockStateBinding));
+            var deepStore = new PluginSettingStore(typeof(MockStateBinding));
+
+            store["TapAction"].SetValue(tapStore);
+            store["DeepClickAction"].SetValue(deepStore);
+
+            var friendly = store.ToString();
+            Assert.Contains("Deep:", friendly);
+            Assert.Contains("MockStateBinding", friendly);
+        }
     }
 }
