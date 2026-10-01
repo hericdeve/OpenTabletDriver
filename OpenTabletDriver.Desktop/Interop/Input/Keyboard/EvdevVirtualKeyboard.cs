@@ -32,10 +32,15 @@ namespace OpenTabletDriver.Desktop.Interop.Input.Keyboard
 
         private void KeyEvent(string key, bool isPress)
         {
-            var keyEventCode = EtoKeysymToEventCode[key];
-
-            Device.Write(EventType.EV_KEY, keyEventCode, isPress ? 1 : 0);
-            Device.Sync();
+            if (EtoKeysymToEventCode.TryGetValue(key, out var keyEventCode))
+            {
+                Device.Write(EventType.EV_KEY, keyEventCode, isPress ? 1 : 0);
+                Device.Sync();
+            }
+            else
+            {
+                Log.Write("EvdevVirtualKeyboard", $"Key '{key}' is not mapped to an EventCode", LogLevel.Warning);
+            }
         }
 
         public void Press(string key)
@@ -64,7 +69,7 @@ namespace OpenTabletDriver.Desktop.Interop.Input.Keyboard
 
         public IEnumerable<string> SupportedKeys => EtoKeysymToEventCode.Keys;
 
-        internal static readonly Dictionary<string, EventCode> EtoKeysymToEventCode = new Dictionary<string, EventCode>
+        internal static readonly Dictionary<string, EventCode> EtoKeysymToEventCode = new Dictionary<string, EventCode>(StringComparer.OrdinalIgnoreCase)
         {
             { "None", 0x0 },
             { "A", EventCode.KEY_A },
@@ -179,7 +184,12 @@ namespace OpenTabletDriver.Desktop.Interop.Input.Keyboard
             { "Shift", EventCode.KEY_LEFTSHIFT },
             { "Alt", EventCode.KEY_LEFTALT },
             { "Control", EventCode.KEY_LEFTCTRL },
+            { "Ctrl", EventCode.KEY_LEFTCTRL },
             { "Application", EventCode.KEY_LEFTMETA },
+            { "Super", EventCode.KEY_LEFTMETA },
+            { "Win", EventCode.KEY_LEFTMETA },
+            { "Meta", EventCode.KEY_LEFTMETA },
+            { "Cmd", EventCode.KEY_LEFTMETA },
             { "Mute", EventCode.KEY_MUTE },
             { "VolumeDown", EventCode.KEY_VOLUMEDOWN },
             { "VolumeUp", EventCode.KEY_VOLUMEUP },

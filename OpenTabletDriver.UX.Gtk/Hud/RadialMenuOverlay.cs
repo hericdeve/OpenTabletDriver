@@ -4,6 +4,7 @@ using Cairo;
 using Gdk;
 using Gtk;
 using OpenTabletDriver.Desktop.Hud;
+using OpenTabletDriver.Plugin;
 using OpenTabletDriver.UX.Gtk.Interop;
 using GtkWindow = Gtk.Window;
 
@@ -37,9 +38,8 @@ namespace OpenTabletDriver.UX.Gtk.Hud
 
             Drawn += OnDrawn;
             ButtonPressEvent += OnButtonPress;
-            MotionNotifyEvent += OnMotionNotify;
 
-            Events |= EventMask.ButtonPressMask | EventMask.PointerMotionMask;
+            Events |= EventMask.ButtonPressMask;
 
             if (GtkLayerShell.IsSupported)
             {
@@ -58,50 +58,55 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                 _config = HudConfiguration.GetDefaults();
 
             // Deduplicate items if corrupted settings file had repeated items
-            if (_config.Items.Count > 8)
+            var seen = new System.Collections.Generic.HashSet<string>();
+            var unique = new System.Collections.Generic.List<HudItem>();
+            foreach (var item in _config.Items)
             {
-                var seen = new System.Collections.Generic.HashSet<string>();
-                var unique = new System.Collections.Generic.List<HudItem>();
-                foreach (var item in _config.Items)
-                {
-                    if (seen.Add(item.Label))
-                        unique.Add(item);
-                }
-                _config.Items = unique;
+                if (seen.Add(item.Label))
+                    unique.Add(item);
             }
+            _config.Items = unique;
 
             _anchorPos = position;
             _currentPos = position;
             _hoveredSlice = -1;
 
-            int diameter = (int)(_config.Radius * 2 + 40);
-            SetDefaultSize(diameter, diameter);
-            Resize(diameter, diameter);
-
-            int x = (int)(position.X - diameter / 2f);
-            int y = (int)(position.Y - diameter / 2f);
-
             if (_isLayerShellActive)
             {
+                // Anchor to all 4 edges to span the full screen, with exclusive zone -1 to overlay panels/bars without displacement
                 GtkLayerShell.SetAnchor(Handle, GtkLayerShell.Edge.Left, true);
+                GtkLayerShell.SetAnchor(Handle, GtkLayerShell.Edge.Right, true);
                 GtkLayerShell.SetAnchor(Handle, GtkLayerShell.Edge.Top, true);
-                GtkLayerShell.SetMargin(Handle, GtkLayerShell.Edge.Left, Math.Max(0, x));
-                GtkLayerShell.SetMargin(Handle, GtkLayerShell.Edge.Top, Math.Max(0, y));
+                GtkLayerShell.SetAnchor(Handle, GtkLayerShell.Edge.Bottom, true);
+                GtkLayerShell.SetMargin(Handle, GtkLayerShell.Edge.Left, 0);
+                GtkLayerShell.SetMargin(Handle, GtkLayerShell.Edge.Right, 0);
+                GtkLayerShell.SetMargin(Handle, GtkLayerShell.Edge.Top, 0);
+                GtkLayerShell.SetMargin(Handle, GtkLayerShell.Edge.Bottom, 0);
+                GtkLayerShell.SetExclusiveZone(Handle, -1);
             }
             else
             {
+                int diameter = (int)(_config.Radius * 2 + 40);
+                SetDefaultSize(diameter, diameter);
+                Resize(diameter, diameter);
+                int x = (int)(position.X - diameter / 2f);
+                int y = (int)(position.Y - diameter / 2f);
                 Move(x, y);
             }
 
+            Log.Write("HUD_GTK", $"Showing RadialMenu at {position.X},{position.Y}");
             ShowAll();
             QueueDraw();
         }
 
-        public void UpdatePosition(Vector2 position)
+        public void UpdatePosition(Vector2 position, int hoveredSlice = -1)
         {
             _currentPos = position;
-            UpdateHoverState();
-            QueueDraw();
+            if (_hoveredSlice != hoveredSlice)
+            {
+                _hoveredSlice = hoveredSlice;
+                QueueDraw();
+            }
         }
 
         public void Dismiss()
@@ -109,34 +114,13 @@ namespace OpenTabletDriver.UX.Gtk.Hud
             Hide();
         }
 
-        private void UpdateHoverState()
-        {
-            Vector2 delta = _currentPos - _anchorPos;
-            float dist = delta.Length();
-
-            if (dist < _config.DeadzoneRadius || _config.Items.Count == 0)
-            {
-                _hoveredSlice = -1;
-                return;
-            }
-
-            int count = _config.Items.Count;
-            float sliceAngle = 360f / count;
-
-            double rad = Math.Atan2(delta.Y, delta.X);
-            double deg = (rad * 180.0 / Math.PI) + 90.0;
-            if (deg < 0) deg += 360.0;
-
-            _hoveredSlice = (int)Math.Floor((deg + (sliceAngle / 2.0)) / sliceAngle) % count;
-        }
-
         private void OnDrawn(object o, DrawnArgs args)
         {
             var cr = args.Cr;
             int width = AllocatedWidth;
             int height = AllocatedHeight;
-            double centerX = width / 2.0;
-            double centerY = height / 2.0;
+            double centerX = _isLayerShellActive ? _anchorPos.X : (width / 2.0);
+            double centerY = _isLayerShellActive ? _anchorPos.Y : (height / 2.0);
 
             // Clear background with complete transparency
             cr.Save();
@@ -163,23 +147,23 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                 bool isHovered = (i == _hoveredSlice);
 
                 cr.NewPath();
-                cr.Arc(centerX, centerY, isHovered ? radiusOuter + 6 : radiusOuter, startRad, endRad);
+                cr.Arc(centerX, centerY, isHovered ? radiusOuter + 8 : radiusOuter, startRad, endRad);
                 cr.ArcNegative(centerX, centerY, radiusInner, endRad, startRad);
                 cr.ClosePath();
 
                 // Wedge fill
                 if (isHovered)
-                    cr.SetSourceRGBA(0.18, 0.55, 0.90, _config.Opacity);
+                    cr.SetSourceRGBA(0.18, 0.55, 0.95, Math.Min(1.0, _config.Opacity + 0.1));
                 else
-                    cr.SetSourceRGBA(0.12, 0.12, 0.15, _config.Opacity * 0.9);
+                    cr.SetSourceRGBA(0.14, 0.14, 0.18, _config.Opacity * 0.9);
                 cr.FillPreserve();
 
                 // Wedge border
                 if (isHovered)
-                    cr.SetSourceRGBA(0.4, 0.8, 1.0, 0.9);
+                    cr.SetSourceRGBA(0.5, 0.85, 1.0, 1.0);
                 else
-                    cr.SetSourceRGBA(0.25, 0.25, 0.30, 0.6);
-                cr.LineWidth = isHovered ? 2.5 : 1.2;
+                    cr.SetSourceRGBA(0.28, 0.28, 0.33, 0.6);
+                cr.LineWidth = isHovered ? 3.0 : 1.2;
                 cr.Stroke();
 
                 // Draw Slice Content (Icon & Text)
@@ -220,21 +204,23 @@ namespace OpenTabletDriver.UX.Gtk.Hud
         }
 
         [GLib.ConnectBefore]
-        private void OnMotionNotify(object o, MotionNotifyEventArgs args)
-        {
-            int diameter = (int)(_config.Radius * 2 + 40);
-            float localX = (float)args.Event.X - (diameter / 2f);
-            float localY = (float)args.Event.Y - (diameter / 2f);
-            _currentPos = _anchorPos + new Vector2(localX, localY);
-            UpdateHoverState();
-            QueueDraw();
-        }
-
-        [GLib.ConnectBefore]
         private void OnButtonPress(object o, ButtonPressEventArgs args)
         {
             if (args.Event.Button == 1) // Left Click
             {
+                // In full-screen layer-shell, clicking outside the menu dismisses the HUD
+                if (_isLayerShellActive)
+                {
+                    double dx = args.Event.X - _anchorPos.X;
+                    double dy = args.Event.Y - _anchorPos.Y;
+                    double dist = Math.Sqrt(dx * dx + dy * dy);
+                    if (dist > _config.Radius + 20)
+                    {
+                        Dismiss();
+                        return;
+                    }
+                }
+
                 if (_hoveredSlice >= 0 && _hoveredSlice < _config.Items.Count)
                 {
                     var item = _config.Items[_hoveredSlice];

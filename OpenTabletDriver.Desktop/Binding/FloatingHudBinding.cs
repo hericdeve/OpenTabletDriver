@@ -23,12 +23,7 @@ namespace OpenTabletDriver.Desktop.Binding
         public IDriverDaemon? Daemon { get; set; }
 
         [BooleanProperty("Keep Cursor Anchored", "Anchor pointer at gesture start during flick gestures")]
-        public bool KeepCursorAnchored { get; set; } = true;
-
-        [SliderProperty("Flick Threshold", 80f, 400f, 160f)]
-        [Unit("ms")]
-        [ToolTip("Maximum hold time to distinguish a quick tap from a hold-and-flick gesture.")]
-        public float FlickThresholdMs { get; set; } = 160f;
+        public bool KeepCursorAnchored { get; set; } = false;
 
         public bool IsActive => _isActive;
         public bool SuppressMotion => KeepCursorAnchored && _isActive;
@@ -44,29 +39,23 @@ namespace OpenTabletDriver.Desktop.Binding
             _pressTimestamp = Stopwatch.GetTimestamp();
             _isActive = true;
 
-            // Retrieve current HUD config asynchronously or fall back to cached defaults
-            if (Daemon != null)
+            _ = Daemon?.TriggerHudShow(new HudShowRequest
             {
-                _ = Daemon.GetSettings().ContinueWith(t =>
-                {
-                    if (t.IsCompletedSuccessfully && t.Result?.Hud != null)
-                        _cachedConfig = t.Result.Hud;
-
-                    _ = Daemon.TriggerHudShow(new HudShowRequest
-                    {
-                        CursorPosition = _anchorPosition,
-                        Configuration = _cachedConfig
-                    });
-                });
-            }
+                CursorPosition = _anchorPosition,
+                Configuration = null
+            });
         }
 
         public void Update(TabletReference tablet, IDeviceReport report)
         {
-            if (!_isActive || report is not IAbsolutePositionReport absReport)
+            if (!_isActive)
                 return;
 
-            _currentPosition = absReport.Position;
+            if (report is IAbsolutePositionReport absReport)
+            {
+                _currentPosition = absReport.Position;
+            }
+
             _ = Daemon?.TriggerHudUpdate(new HudUpdateRequest
             {
                 CursorPosition = _currentPosition
@@ -79,51 +68,13 @@ namespace OpenTabletDriver.Desktop.Binding
                 return;
 
             _isActive = false;
-            double elapsedMs = (Stopwatch.GetTimestamp() - _pressTimestamp) * 1000.0 / Stopwatch.Frequency;
 
-            if (elapsedMs > FlickThresholdMs)
+            if (report is IAbsolutePositionReport absReport)
             {
-                // Hold & Flick gesture: compute active slice and fire action
-                ProcessFlickSelection();
-                _ = Daemon?.TriggerHudDismiss();
-            }
-            else
-            {
-                // Quick Tap: HUD remains open in Tap & Browse mode
-                // No action triggered on release; waiting for user click/tap on wedge
-            }
-        }
-
-        private void ProcessFlickSelection()
-        {
-            if (_cachedConfig.Items.Count == 0 || Daemon == null)
-                return;
-
-            Vector2 delta = _currentPosition - _anchorPosition;
-            float distance = delta.Length();
-
-            if (distance < _cachedConfig.DeadzoneRadius)
-            {
-                // Released inside deadzone: cancel gesture
-                return;
+                _currentPosition = absReport.Position;
             }
 
-            int itemCount = _cachedConfig.Items.Count;
-            float sliceAngle = 360f / itemCount;
-
-            // Calculate angle in degrees: 0 deg = Up (12 o'clock), clockwise
-            double rad = Math.Atan2(delta.Y, delta.X);
-            double deg = (rad * 180.0 / Math.PI) + 90.0;
-            if (deg < 0)
-                deg += 360.0;
-
-            int selectedIndex = (int)Math.Floor((deg + (sliceAngle / 2.0)) / sliceAngle) % itemCount;
-
-            if (selectedIndex >= 0 && selectedIndex < itemCount)
-            {
-                var item = _cachedConfig.Items[selectedIndex];
-                _ = Daemon.ExecuteHudAction(item.Action);
-            }
+            _ = Daemon?.ConfirmHudSelection(_currentPosition);
         }
     }
 }

@@ -26,6 +26,10 @@ namespace OpenTabletDriver.Desktop.Binding
         public ThresholdBindingState? Eraser { set; get; }
         private bool _isEraser;
 
+        public Func<ITabletReport, bool>? TabletReportFilter { get; set; }
+        public event Action? OutOfRange;
+        public Action<Vector2>? OnPositionChanged;
+
         public Dictionary<int, BindingState?> PenButtons { set; get; } = new Dictionary<int, BindingState?>();
         public Dictionary<int, BindingState?> AuxButtons { set; get; } = new Dictionary<int, BindingState?>();
         public Dictionary<int, BindingState?> MouseButtons { set; get; } = new Dictionary<int, BindingState?>();
@@ -39,6 +43,10 @@ namespace OpenTabletDriver.Desktop.Binding
 
         private readonly TabletReference tablet;
         private Vector2? _anchorPosition;
+        private Vector2? _precisionAnchorTablet;
+        private Vector2? _precisionAnchorScreen;
+        private bool _needsPrecisionReanchor = true;
+        private bool _isPrecisionActive;
 
         public event Action<IDeviceReport?>? Emit;
 
@@ -46,8 +54,15 @@ namespace OpenTabletDriver.Desktop.Binding
         {
             if (report != null)
             {
+                // Dispatch to bindings FIRST with true live pen coordinates
                 HandleBinding(report);
+                // Apply precision mode scaling if active
+                ApplyPrecisionScaling(report);
+                // Then apply suppression (anchor clamping, zero tip pressure) before emitting to OS pointer
                 ApplyPointerSuppression(report);
+
+                if (report is IAbsolutePositionReport absReport)
+                    OnPositionChanged?.Invoke(absReport.Position);
             }
 
             Emit?.Invoke(report);
@@ -76,6 +91,10 @@ namespace OpenTabletDriver.Desktop.Binding
         public void ReleaseAllBindings()
         {
             _anchorPosition = null;
+            _precisionAnchorTablet = null;
+            _precisionAnchorScreen = null;
+            _needsPrecisionReanchor = true;
+            _isPrecisionActive = false;
             var report = new OutOfRangeReport(Array.Empty<byte>());
 
             Tip?.Invoke(tablet, report, false);
@@ -155,7 +174,9 @@ namespace OpenTabletDriver.Desktop.Binding
 
         private void HandleOutOfRangeReport(TabletReference tablet, IDeviceReport report)
         {
+            OutOfRange?.Invoke();
             _anchorPosition = null;
+            _needsPrecisionReanchor = true;
             for (var i = 0; i < PenButtons.Count; i++)
             {
                 if (PenButtons.TryGetValue(i, out var binding))
@@ -191,8 +212,10 @@ namespace OpenTabletDriver.Desktop.Binding
         {
             for (int i = 0; i < newStates.Length; i++)
             {
-                if (bindings.TryGetValue(i, out var binding))
-                    binding?.Invoke(tablet, report, newStates[i]);
+                if (bindings.TryGetValue(i, out var binding) && binding != null)
+                {
+                    binding.Invoke(tablet, report, newStates[i]);
+                }
             }
         }
 
@@ -255,6 +278,110 @@ namespace OpenTabletDriver.Desktop.Binding
                     motion |= suppressor.SuppressMotion;
                     tip |= suppressor.SuppressTip;
                 }
+            }
+        }
+
+        private void ApplyPrecisionScaling(IDeviceReport report)
+        {
+            if (report is not IAbsolutePositionReport absReport)
+                return;
+
+            if (HasActivePrecisionModifier(out float scale, out bool reanchorOnLift))
+            {
+                if (!_isPrecisionActive)
+                {
+                    // Newly activated
+                    _isPrecisionActive = true;
+                    _precisionAnchorTablet = absReport.Position;
+                    _precisionAnchorScreen = absReport.Position;
+                    _needsPrecisionReanchor = false;
+                }
+                else if (reanchorOnLift && _needsPrecisionReanchor)
+                {
+                    // Re-anchor reference point to new landing position, keep current screen position
+                    _precisionAnchorTablet = absReport.Position;
+                    _needsPrecisionReanchor = false;
+                }
+
+                if (_precisionAnchorTablet.HasValue && _precisionAnchorScreen.HasValue)
+                {
+                    if (reanchorOnLift)
+                    {
+                        // Incremental relative delta mode: allows indefinite smooth multi-stroke drawing
+                        Vector2 rawPos = absReport.Position;
+                        Vector2 delta = rawPos - _precisionAnchorTablet.Value;
+                        Vector2 newScreenPos = _precisionAnchorScreen.Value + (delta * scale);
+                        absReport.Position = newScreenPos;
+                        _precisionAnchorScreen = newScreenPos;
+                        _precisionAnchorTablet = rawPos;
+                    }
+                    else
+                    {
+                        // Fixed center mode: scales strictly relative to original button activation anchor
+                        Vector2 delta = absReport.Position - _precisionAnchorTablet.Value;
+                        absReport.Position = _precisionAnchorScreen.Value + (delta * scale);
+                    }
+                }
+            }
+            else
+            {
+                if (_isPrecisionActive)
+                {
+                    _isPrecisionActive = false;
+                    _precisionAnchorTablet = null;
+                    _precisionAnchorScreen = null;
+                    _needsPrecisionReanchor = true;
+                }
+            }
+        }
+
+        public Func<bool>? IsDaemonPrecisionActive { get; set; }
+
+        private bool HasActivePrecisionModifier(out float scale, out bool reanchorOnLift)
+        {
+            scale = 1.0f;
+            reanchorOnLift = true;
+
+            // Check bindings in order: PenButtons, AuxButtons, MouseButtons
+            foreach (var state in PenButtons.Values)
+            {
+                if (CheckModifier(state, out scale, out reanchorOnLift))
+                    return true;
+            }
+
+            foreach (var state in AuxButtons.Values)
+            {
+                if (CheckModifier(state, out scale, out reanchorOnLift))
+                    return true;
+            }
+
+            foreach (var state in MouseButtons.Values)
+            {
+                if (CheckModifier(state, out scale, out reanchorOnLift))
+                    return true;
+            }
+
+            if (IsDaemonPrecisionActive?.Invoke() == true)
+            {
+                scale = 0.3f; // Default 30% speed for HUD / CLI toggle
+                reanchorOnLift = true;
+                return true;
+            }
+
+            return false;
+
+            bool CheckModifier(BindingState? state, out float modifierScale, out bool modifierReanchor)
+            {
+                if (state?.Binding is IPrecisionModifier { IsActive: true } modifier)
+                {
+                    modifierScale = modifier.Scale;
+                    modifierReanchor = modifier.ReanchorOnLift;
+                    return true;
+                }
+
+                modifierScale = 1.0f;
+                modifierReanchor = true;
+                return false;
             }
         }
     }

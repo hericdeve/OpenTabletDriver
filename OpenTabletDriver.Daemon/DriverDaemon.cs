@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -33,9 +34,18 @@ namespace OpenTabletDriver.Daemon
     {
         private const string AVALONIA_REVISION = "0.7.0.0";
         private readonly AppProfileMonitor _appProfileMonitor;
+        private readonly object _hudLock = new();
+
+        public static DriverDaemon? ActiveInstance { get; private set; }
+        public bool IsHudActive { get; private set; }
+        public Vector2? HudAnchorPosition { get; private set; }
+        public Vector2? HudCurrentPosition { get; private set; }
+        public HudConfiguration? ActiveHudConfig { get; private set; }
+        public int CurrentHoveredSlice { get; private set; } = -1;
 
         public DriverDaemon(Driver driver)
         {
+            ActiveInstance = this;
             Driver = driver;
             _appProfileMonitor = new AppProfileMonitor(this);
             _logFile = new LogFile(AppInfo.Current.LogDirectory);
@@ -536,7 +546,7 @@ namespace OpenTabletDriver.Daemon
             }
         }
 
-        private static BindingHandler CreateBindingHandler(InputDeviceTree dev, IOutputMode outputMode, BindingSettings settings)
+        private BindingHandler CreateBindingHandler(InputDeviceTree dev, IOutputMode outputMode, BindingSettings settings)
         {
             string group = dev.Properties.Name;
             var tabletReference = outputMode.Tablet;
@@ -545,8 +555,10 @@ namespace OpenTabletDriver.Daemon
                 "tabletReference was null. This was expected to be checked by the sender");
 
             var bindingHandler = new BindingHandler(tabletReference);
+            bindingHandler.IsDaemonPrecisionActive = () => _isPrecisionModeActive;
 
             var bindingServiceProvider = new ServiceManager();
+            bindingServiceProvider.AddService<IDriverDaemon>(() => this);
             object? pointer = outputMode switch
             {
                 AbsoluteOutputMode absoluteOutputMode => absoluteOutputMode.Pointer,
@@ -801,18 +813,145 @@ namespace OpenTabletDriver.Daemon
 
         public Task TriggerHudShow(HudShowRequest request)
         {
+            lock (_hudLock)
+            {
+                IsHudActive = true;
+                ActiveHudConfig = Settings?.Hud ?? request.Configuration ?? HudConfiguration.GetDefaults();
+                HudAnchorPosition = request.CursorPosition;
+                HudCurrentPosition = request.CursorPosition;
+                CurrentHoveredSlice = -1;
+                request.Configuration = ActiveHudConfig;
+            }
+
             ShowHudRequested?.Invoke(this, request);
             return Task.CompletedTask;
         }
 
         public Task TriggerHudUpdate(HudUpdateRequest request)
         {
-            UpdateHudRequested?.Invoke(this, request);
+            int hovered = -1;
+            bool changed = false;
+            lock (_hudLock)
+            {
+                if (!IsHudActive)
+                    return Task.CompletedTask;
+
+                HudCurrentPosition = request.CursorPosition;
+
+                if (ActiveHudConfig != null && HudAnchorPosition.HasValue)
+                {
+                    hovered = CalculateHoveredSlice(request.CursorPosition, HudAnchorPosition.Value, ActiveHudConfig, CurrentHoveredSlice);
+                }
+
+                if (CurrentHoveredSlice != hovered)
+                {
+                    CurrentHoveredSlice = hovered;
+                    changed = true;
+                }
+
+                request.HoveredSlice = CurrentHoveredSlice;
+            }
+
+            if (changed)
+            {
+                UpdateHudRequested?.Invoke(this, request);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private static int CalculateHoveredSlice(Vector2 currentPos, Vector2 anchorPos, HudConfiguration config, int currentSlice)
+        {
+            Vector2 delta = currentPos - anchorPos;
+            float distance = delta.Length();
+            if (distance < config.DeadzoneRadius || config.Items.Count == 0)
+                return -1;
+
+            int count = config.Items.Count;
+            float sliceAngle = 360f / count;
+            double rad = Math.Atan2(delta.Y, delta.X);
+            double deg = (rad * 180.0 / Math.PI) + 90.0;
+            if (deg < 0) deg += 360.0;
+
+            // If we currently have a slice selected, apply angular hysteresis (buffer of 2.5 degrees)
+            // to eliminate boundary jitter and split-second jumping.
+            const double hysteresis = 2.5;
+            if (currentSlice >= 0 && currentSlice < count)
+            {
+                double currentCenterAngle = currentSlice * sliceAngle;
+                double diff = deg - currentCenterAngle;
+                while (diff > 180.0) diff -= 360.0;
+                while (diff < -180.0) diff += 360.0;
+
+                // Within current slice boundary + hysteresis margin
+                if (Math.Abs(diff) <= (sliceAngle / 2.0) + hysteresis)
+                {
+                    return currentSlice;
+                }
+            }
+
+            return (int)Math.Floor((deg + (sliceAngle / 2.0)) / sliceAngle) % count;
+        }
+
+        public Task ConfirmHudSelection(Vector2? finalPosition = null)
+        {
+            HudAction? actionToExecute = null;
+            lock (_hudLock)
+            {
+                if (!IsHudActive)
+                    return Task.CompletedTask;
+
+                IsHudActive = false;
+
+                // If a final position was provided, calculate the definitive slice at release time
+                if (finalPosition.HasValue && ActiveHudConfig != null && HudAnchorPosition.HasValue)
+                {
+                    CurrentHoveredSlice = CalculateHoveredSlice(finalPosition.Value, HudAnchorPosition.Value, ActiveHudConfig, CurrentHoveredSlice);
+                }
+
+                if (ActiveHudConfig != null && CurrentHoveredSlice >= 0 && CurrentHoveredSlice < ActiveHudConfig.Items.Count)
+                {
+                    actionToExecute = ActiveHudConfig.Items[CurrentHoveredSlice].Action;
+                }
+
+                CurrentHoveredSlice = -1;
+                HudAnchorPosition = null;
+                HudCurrentPosition = null;
+            }
+
+            DismissHudRequested?.Invoke(this, EventArgs.Empty);
+
+            if (actionToExecute != null)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await ExecuteHudAction(actionToExecute);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Exception(ex);
+                    }
+                });
+            }
+
             return Task.CompletedTask;
         }
 
         public Task TriggerHudDismiss()
         {
+            lock (_hudLock)
+            {
+                if (!IsHudActive)
+                    return Task.CompletedTask;
+
+                IsHudActive = false;
+                HudAnchorPosition = null;
+                HudCurrentPosition = null;
+                CurrentHoveredSlice = -1;
+            }
+
             DismissHudRequested?.Invoke(this, EventArgs.Empty);
             return Task.CompletedTask;
         }
@@ -868,9 +1007,23 @@ namespace OpenTabletDriver.Daemon
                     CycleDisplay();
                     break;
                 case "PrecisionMode":
-                    Log.Write("HUD", "Precision mode action triggered");
+                    await TogglePrecisionMode();
                     break;
             }
+        }
+
+        private bool _isPrecisionModeActive;
+
+        public Task<bool> IsPrecisionModeActive()
+        {
+            return Task.FromResult(_isPrecisionModeActive);
+        }
+
+        public Task TogglePrecisionMode()
+        {
+            _isPrecisionModeActive = !_isPrecisionModeActive;
+            Log.Write("PrecisionMode", $"Precision mode toggled {(_isPrecisionModeActive ? "ON" : "OFF")}.");
+            return Task.CompletedTask;
         }
 
         private static async Task HandleMouseClick(string? button)

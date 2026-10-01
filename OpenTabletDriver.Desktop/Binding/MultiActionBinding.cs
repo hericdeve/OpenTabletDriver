@@ -3,6 +3,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using OpenTabletDriver.Desktop.Contracts;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Attributes;
 using OpenTabletDriver.Plugin.DependencyInjection;
@@ -12,7 +13,7 @@ using OpenTabletDriver.Plugin.Tablet;
 namespace OpenTabletDriver.Desktop.Binding
 {
     [PluginName(PLUGIN_NAME)]
-    public class MultiActionBinding : IStateBinding
+    public class MultiActionBinding : IStateBinding, IContinuousBinding, IPointerSuppressor
     {
         private const string PLUGIN_NAME = "Multi-Action Binding";
         private const char KEYS_SPLITTER = '+';
@@ -20,6 +21,7 @@ namespace OpenTabletDriver.Desktop.Binding
         private IBinding? _tapBinding;
         private IBinding? _doubleClickBinding;
         private IBinding? _holdBinding;
+        private IDeviceReport? _latestReport;
 
         // ── State machine ────────────────────────────────────────────────────────
         //
@@ -70,6 +72,7 @@ namespace OpenTabletDriver.Desktop.Binding
         public IPenActionHandler? PenActionHandler { set; get; }
 
         [Resolved]
+        public IDriverDaemon? Daemon { set; get; }
 
         [TabletReference]
         public TabletReference? Tablet { set; get; }
@@ -78,14 +81,28 @@ namespace OpenTabletDriver.Desktop.Binding
         public void OnDependencyLoad()
         {
             var sm = new ServiceManager();
+            if (Daemon != null) sm.AddService(() => Daemon);
             if (MouseButtonHandler != null) sm.AddService(() => MouseButtonHandler);
             if (MouseScrollHandler != null) sm.AddService(() => MouseScrollHandler);
             if (PenActionHandler != null) sm.AddService(() => PenActionHandler);
 
-
             _tapBinding = TapAction?.Construct<IBinding>(sm, Tablet);
             _doubleClickBinding = DoubleClickAction?.Construct<IBinding>(sm, Tablet);
             _holdBinding = HoldAction?.Construct<IBinding>(sm, Tablet);
+        }
+
+        public bool IsActive => (_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { IsActive: true };
+        public bool SuppressMotion => (_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { SuppressMotion: true };
+        public bool SuppressTip => (_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { SuppressTip: true };
+
+        public void Update(TabletReference tablet, IDeviceReport report)
+        {
+            _latestReport = report;
+
+            if ((_holdKeysDown || _holdActivated) && _holdBinding is IContinuousBinding continuous)
+            {
+                continuous.Update(tablet, report);
+            }
         }
 
         // ── Properties ───────────────────────────────────────────────────────────
@@ -189,7 +206,7 @@ namespace OpenTabletDriver.Desktop.Binding
                         {
                             // Hold keys are physically down — release them and go idle.
                             _state = GestureState.Idle;
-                            postAction = () => (_holdBinding as IStateBinding)?.Release(tablet, report);
+                            postAction = () => (_holdBinding as IStateBinding)?.Release(tablet, _latestReport ?? report);
                         }
                         else if (holdPending)
                         {
@@ -263,7 +280,7 @@ namespace OpenTabletDriver.Desktop.Binding
                 if (_holdBinding is IStateBinding stateHold)
                 {
                     _lastHoldActionFiredGlobal = DateTime.Now;
-                    stateHold.Press(tablet, report);
+                    stateHold.Press(tablet, _latestReport ?? report);
                 }
 
                 // Reconcile: did Release run while we were pressing?

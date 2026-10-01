@@ -25,6 +25,12 @@ namespace OpenTabletDriver.UX.Controls
 
             control.Pages.Add(new TabPage
             {
+                Text = "HUD",
+                Content = hudEditor = new()
+            });
+
+            control.Pages.Add(new TabPage
+            {
                 Text = "Filters",
                 Padding = 5,
                 Content = filterEditor = new()
@@ -97,6 +103,7 @@ namespace OpenTabletDriver.UX.Controls
         private Placeholder placeholder;
         private LogView logView;
         private OutputModeEditor outputModeEditor;
+        private HudEditor hudEditor;
         private BindingEditor penBindingEditor, auxBindingEditor, mouseBindingEditor;
         private List<BindingEditor> wheelBindingEditors = [];
         private PluginSettingStoreCollectionEditor<IPositionedPipelineElement<IDeviceReport>> filterEditor;

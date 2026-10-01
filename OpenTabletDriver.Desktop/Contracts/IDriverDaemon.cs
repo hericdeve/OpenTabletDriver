@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading.Tasks;
 using OpenTabletDriver.Desktop.Diagnostics;
 using OpenTabletDriver.Desktop.Hud;
@@ -57,6 +58,10 @@ namespace OpenTabletDriver.Desktop.Contracts
         Task TriggerHudShow(HudShowRequest request);
         Task TriggerHudUpdate(HudUpdateRequest request);
         Task TriggerHudDismiss();
+        Task ConfirmHudSelection(Vector2? finalPosition = null);
         Task ExecuteHudAction(HudAction action);
+
+        Task<bool> IsPrecisionModeActive();
+        Task TogglePrecisionMode();
     }
 }

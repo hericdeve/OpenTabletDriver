@@ -42,15 +42,17 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                 try
                 {
                     EnsureCreated();
-                    if (request.Configuration.FormFactor == HudFormFactor.QuickBar)
+                    var config = request.Configuration ?? HudConfiguration.GetDefaults();
+                    Log.Write("HUD_MGR", $"Show requested with FormFactor: {config.FormFactor}");
+                    if (config.FormFactor == HudFormFactor.QuickBar)
                     {
                         _radialMenu?.Dismiss();
-                        _quickBar?.ShowAt(request.CursorPosition, request.Configuration);
+                        _quickBar?.ShowAt(request.CursorPosition, config);
                     }
                     else
                     {
                         _quickBar?.Dismiss();
-                        _radialMenu?.ShowAt(request.CursorPosition, request.Configuration);
+                        _radialMenu?.ShowAt(request.CursorPosition, config);
                     }
                 }
                 catch (Exception ex)
@@ -61,17 +63,30 @@ namespace OpenTabletDriver.UX.Gtk.Hud
             });
         }
 
+        private bool _isUpdatePending;
+        private HudUpdateRequest? _pendingUpdateRequest;
+
         private void OnUpdateHudRequested(object? sender, HudUpdateRequest request)
         {
+            _pendingUpdateRequest = request;
+            if (_isUpdatePending)
+                return;
+
+            _isUpdatePending = true;
             GLib.Idle.Add(() =>
             {
-                try
+                _isUpdatePending = false;
+                var req = _pendingUpdateRequest;
+                if (req != null)
                 {
-                    _radialMenu?.UpdatePosition(request.CursorPosition);
-                }
-                catch (Exception ex)
-                {
-                    Log.Exception(ex);
+                    try
+                    {
+                        _radialMenu?.UpdatePosition(req.CursorPosition, req.HoveredSlice);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Exception(ex);
+                    }
                 }
                 return false;
             });
