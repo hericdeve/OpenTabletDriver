@@ -97,7 +97,7 @@ namespace OpenTabletDriver.UX.Windows.Bindings
                 Text = TOOLTIP;
             }
 
-            private const string TOOLTIP = "Press a key, combination of keys, or a mouse button.";
+            private const string TOOLTIP = "Press a key, combination of keys, click a mouse button, or scroll wheel.";
 
             private PluginSettingStore? store;
             public PluginSettingStore? Store
@@ -150,6 +150,33 @@ namespace OpenTabletDriver.UX.Windows.Bindings
                 var store = new PluginSettingStore(typeof(MouseBinding));
                 store[nameof(MouseBinding.Button)].SetValue(ParseMouseButton(e));
                 this.Store = store;
+            }
+
+            protected override void OnMouseWheel(MouseEventArgs e)
+            {
+                PluginSettingStore? store = null;
+                if (e.Delta.Height > 0)
+                {
+                    store = new PluginSettingStore(typeof(ScrollUpBinding));
+                }
+                else if (e.Delta.Height < 0)
+                {
+                    store = new PluginSettingStore(typeof(ScrollDownBinding));
+                }
+                else if (e.Delta.Width > 0)
+                {
+                    store = new PluginSettingStore(typeof(ScrollRightBinding));
+                }
+                else if (e.Delta.Width < 0)
+                {
+                    store = new PluginSettingStore(typeof(ScrollLeftBinding));
+                }
+
+                if (store != null)
+                {
+                    this.Store = store;
+                    e.Handled = true;
+                }
             }
 
             private static void AppendSeparator(StringBuilder sb, string separator, string text)

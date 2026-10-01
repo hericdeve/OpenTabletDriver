@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using OpenTabletDriver.Plugin;
@@ -24,6 +25,7 @@ namespace OpenTabletDriver.Desktop.Binding
 
         public ThresholdBindingState? Tip { set; get; }
         public ThresholdBindingState? Eraser { set; get; }
+        public DeepPressBindingState? TipDeepPress { set; get; }
         private bool _isEraser;
 
         public Func<ITabletReport, bool>? TabletReportFilter { get; set; }
@@ -99,6 +101,7 @@ namespace OpenTabletDriver.Desktop.Binding
 
             Tip?.Invoke(tablet, report, false);
             Eraser?.Invoke(tablet, report, false);
+            TipDeepPress?.Reset(tablet, report);
 
             ReleaseBindingCollection(tablet, report, PenButtons);
             ReleaseBindingCollection(tablet, report, AuxButtons);
@@ -177,6 +180,7 @@ namespace OpenTabletDriver.Desktop.Binding
             OutOfRange?.Invoke();
             _anchorPosition = null;
             _needsPrecisionReanchor = true;
+            TipDeepPress?.Reset(tablet, report);
             for (var i = 0; i < PenButtons.Count; i++)
             {
                 if (PenButtons.TryGetValue(i, out var binding))
@@ -188,9 +192,26 @@ namespace OpenTabletDriver.Desktop.Binding
         {
             float pressurePercent = (float)report.Pressure / (float)pen.MaxPressure * 100f;
             if (_isEraser)
+            {
                 Eraser?.Invoke(tablet, report, pressurePercent);
+            }
             else
-                Tip?.Invoke(tablet, report, pressurePercent);
+            {
+                bool suppressTip = false;
+                if (TipDeepPress != null)
+                {
+                    TipDeepPress.ProcessReport(tablet, report, pressurePercent, out suppressTip);
+                }
+
+                if (suppressTip)
+                {
+                    Tip?.Invoke(tablet, report, 0f);
+                }
+                else
+                {
+                    Tip?.Invoke(tablet, report, pressurePercent);
+                }
+            }
 
             HandleBindingCollection(tablet, report, PenButtons, report.PenButtons);
         }
@@ -255,8 +276,24 @@ namespace OpenTabletDriver.Desktop.Binding
             bool motion = false;
             bool tip = false;
 
+            if (TipDeepPress is { LockTipUntilLift: true, SuppressStroke: true } deepPress)
+            {
+                if (deepPress.ShouldHoldTipSuppressed())
+                {
+                    tip = true;
+                }
+                else
+                {
+                    long elapsed = Stopwatch.GetTimestamp() - deepPress.DeepPressActivatedTimestamp;
+                    double elapsedMs = (double)elapsed / Stopwatch.Frequency * 1000.0;
+                    if (elapsedMs < DeepPressBindingState.ToolSwitchPulseDurationMs)
+                        tip = true;
+                }
+            }
+
             CheckState(Tip);
             CheckState(Eraser);
+            CheckState(TipDeepPress);
 
             foreach (var state in PenButtons.Values)
                 CheckState(state);

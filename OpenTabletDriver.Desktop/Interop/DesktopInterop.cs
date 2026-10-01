@@ -30,6 +30,7 @@ namespace OpenTabletDriver.Desktop.Interop
         private static IPressureHandler? virtualTablet;
         private static IVirtualKeyboard? virtualKeyboard;
         private static IVirtualPad? virtualPad;
+        private static IGestureHandler? gestureHandler;
 
         public static void Open(string path)
         {
@@ -115,6 +116,12 @@ namespace OpenTabletDriver.Desktop.Interop
         public static IVirtualPad? VirtualPad => CurrentPlatform switch
         {
             PluginPlatform.Linux => virtualPad ??= new EvdevVirtualPad(),
+            _ => null
+        };
+
+        public static IGestureHandler? GestureHandler => CurrentPlatform switch
+        {
+            PluginPlatform.Linux => gestureHandler ??= new OpenTabletDriver.Desktop.Interop.Input.Gesture.EvdevVirtualTouchpad(),
             _ => null
         };
 

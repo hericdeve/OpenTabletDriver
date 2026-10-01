@@ -27,6 +27,11 @@ namespace OpenTabletDriver.Desktop.Profiles
         private List<WheelBindingSettings> wheelBindings = [];
 
         private bool disablePressure, disableTilt, disableRotation, enableDragBindings;
+        private PluginSettingStore? tipDeepPressButton;
+        private float tipDeepPressThreshold = 80.0f;
+        private float tipDeepPressHoldDelayMs = 60.0f;
+        private bool tipDeepPressSuppressStroke = true;
+        private bool uniformStrokePressure;
 
         [JsonProperty(nameof(TipActivationThreshold))]
         public float TipActivationThreshold
@@ -40,6 +45,34 @@ namespace OpenTabletDriver.Desktop.Profiles
         {
             set => this.RaiseAndSetIfChanged(ref this.tipButton, value);
             get => this.tipButton;
+        }
+
+        [JsonProperty(nameof(TipDeepPressButton))]
+        public PluginSettingStore? TipDeepPressButton
+        {
+            set => this.RaiseAndSetIfChanged(ref this.tipDeepPressButton, value);
+            get => this.tipDeepPressButton;
+        }
+
+        [JsonProperty(nameof(TipDeepPressThreshold))]
+        public float TipDeepPressThreshold
+        {
+            set => this.RaiseAndSetIfChanged(ref this.tipDeepPressThreshold, value);
+            get => this.tipDeepPressThreshold;
+        }
+
+        [JsonProperty(nameof(TipDeepPressHoldDelayMs))]
+        public float TipDeepPressHoldDelayMs
+        {
+            set => this.RaiseAndSetIfChanged(ref this.tipDeepPressHoldDelayMs, value);
+            get => this.tipDeepPressHoldDelayMs;
+        }
+
+        [JsonProperty(nameof(TipDeepPressSuppressStroke))]
+        public bool TipDeepPressSuppressStroke
+        {
+            set => this.RaiseAndSetIfChanged(ref this.tipDeepPressSuppressStroke, value);
+            get => this.tipDeepPressSuppressStroke;
         }
 
         [JsonProperty(nameof(EraserActivationThreshold))]
@@ -103,6 +136,13 @@ namespace OpenTabletDriver.Desktop.Profiles
         {
             set => this.RaiseAndSetIfChanged(ref this.disablePressure, value);
             get => this.disablePressure;
+        }
+
+        [JsonProperty(nameof(UniformStrokePressure))]
+        public bool UniformStrokePressure
+        {
+            set => this.RaiseAndSetIfChanged(ref this.uniformStrokePressure, value);
+            get => this.uniformStrokePressure;
         }
 
         [JsonProperty(nameof(DisableTilt))]

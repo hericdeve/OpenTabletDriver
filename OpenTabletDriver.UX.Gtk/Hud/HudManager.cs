@@ -113,5 +113,20 @@ namespace OpenTabletDriver.UX.Gtk.Hud
         {
             _ = App.Driver.Instance?.ExecuteHudItem(item);
         }
+
+        public void Dispose()
+        {
+            App.Driver.ShowHudRequested -= OnShowHudRequested;
+            App.Driver.UpdateHudRequested -= OnUpdateHudRequested;
+            App.Driver.DismissHudRequested -= OnDismissHudRequested;
+
+            _radialMenu?.Dismiss();
+            _radialMenu?.Dispose();
+            _radialMenu = null;
+
+            _quickBar?.Dismiss();
+            _quickBar?.Dispose();
+            _quickBar = null;
+        }
     }
 }

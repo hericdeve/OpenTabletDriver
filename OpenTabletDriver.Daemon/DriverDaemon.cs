@@ -304,6 +304,7 @@ namespace OpenTabletDriver.Daemon
                         SetOutputModeElements(dev, outputMode, profile, bindingHandler);
 
                         outputMode.DisablePressure = profile.BindingSettings.DisablePressure;
+                        outputMode.UniformStrokePressure = profile.BindingSettings.UniformStrokePressure;
                         outputMode.DisableTilt = profile.BindingSettings.DisableTilt;
                         outputMode.DisableRotation = profile.BindingSettings.DisableRotation;
                     }
@@ -356,8 +357,9 @@ namespace OpenTabletDriver.Daemon
 
         private static void LogPressureState(string group, Profile profile)
         {
-            Log.Write(group,
-                $"Pressure: {(profile.BindingSettings.DisablePressure ? "Disabled" : "Enabled")}");
+            string mode = profile.BindingSettings.DisablePressure ? "Disabled" :
+                (profile.BindingSettings.UniformStrokePressure ? "Uniform (Constant 100%)" : "Enabled");
+            Log.Write(group, $"Pressure: {mode}");
         }
 
         private void RecoverSettings(Settings? settings)
@@ -575,6 +577,11 @@ namespace OpenTabletDriver.Daemon
             else if (DesktopInterop.RelativePointer is IMouseScrollHandler fallbackScrollHandler)
                 bindingServiceProvider.AddService(() => fallbackScrollHandler);
 
+            bindingServiceProvider.AddService<OpenTabletDriver.Plugin.Timers.ITimer>(() => DesktopInterop.Timer);
+
+            if (DesktopInterop.GestureHandler is IGestureHandler gestureHandler)
+                bindingServiceProvider.AddService(() => gestureHandler);
+
             if (pointer is IPenActionHandler penActionHandler)
                 bindingServiceProvider.AddService(() => penActionHandler);
 
@@ -586,6 +593,22 @@ namespace OpenTabletDriver.Daemon
             if (tip.Binding != null)
             {
                 Log.Write(group, $"Tip Binding: [{tip.Binding}]@{settings.TipActivationThreshold}%");
+            }
+
+            if (settings.TipDeepPressButton != null)
+            {
+                var tipDeepPress = bindingHandler.TipDeepPress = new DeepPressBindingState
+                {
+                    Binding = settings.TipDeepPressButton.Construct<IBinding>(bindingServiceProvider, tabletReference),
+                    ActivationThreshold = settings.TipDeepPressThreshold,
+                    HoldDelayMs = settings.TipDeepPressHoldDelayMs,
+                    SuppressStroke = settings.TipDeepPressSuppressStroke
+                };
+
+                if (tipDeepPress.Binding != null)
+                {
+                    Log.Write(group, $"Tip Deep Press: [{tipDeepPress.Binding}]@{settings.TipDeepPressThreshold}% (Hold: {settings.TipDeepPressHoldDelayMs}ms, SuppressStroke: {settings.TipDeepPressSuppressStroke})");
+                }
             }
 
             var eraser = bindingHandler.Eraser = new ThresholdBindingState

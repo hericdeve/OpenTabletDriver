@@ -49,6 +49,8 @@ namespace OpenTabletDriver.Plugin.Output
 
         public bool DisablePressure { set; get; }
 
+        public bool UniformStrokePressure { set; get; }
+
         public bool DisableTilt { set; get; }
 
         public bool DisableRotation { set; get; }

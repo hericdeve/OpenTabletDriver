@@ -76,9 +76,19 @@ namespace OpenTabletDriver.UX.Controls
             if (allowSecondaryModes)
             {
                 _holdDisplay = new BindingDisplay(allowSecondaryModes: false);
+                _holdLiftDisplay = new BindingDisplay(allowSecondaryModes: false);
                 _doubleClickDisplay = new BindingDisplay(allowSecondaryModes: false);
                 _holdThresholdBox = new FloatNumberBox { Width = 55, ToolTip = "Hold activation threshold in milliseconds", Value = 400f };
                 _doubleClickWindowBox = new FloatNumberBox { Width = 55, ToolTip = "Double-click detection window in milliseconds", Value = 250f };
+                _liftTriggerDropDown = new DropDown
+                {
+                    Width = 115,
+                    ToolTip = "Trigger for lift action:\n• Button Release: when the held button is released\n• Pen Tip Lift: when the stylus tip is lifted off the tablet\n• Either: whichever occurs first"
+                };
+                _liftTriggerDropDown.Items.Add(new ListItem { Text = "Button Release", Key = "Button Release" });
+                _liftTriggerDropDown.Items.Add(new ListItem { Text = "Pen Tip Lift", Key = "Pen Tip Lift" });
+                _liftTriggerDropDown.Items.Add(new ListItem { Text = "Either", Key = "Either" });
+                _liftTriggerDropDown.SelectedKey = "Button Release";
 
                 _secondaryPanel = new StackLayout
                 {
@@ -129,6 +139,31 @@ namespace OpenTabletDriver.UX.Controls
                                 {
                                     new StackLayoutItem
                                     {
+                                        Control = new Label { Text = "On Lift:", Width = 80, VerticalAlignment = VerticalAlignment.Center }
+                                    },
+                                    new StackLayoutItem
+                                    {
+                                        Expand = true,
+                                        Control = _holdLiftDisplay
+                                    },
+                                    new StackLayoutItem
+                                    {
+                                        Control = _liftTriggerDropDown
+                                    }
+                                }
+                            }
+                        },
+                        new StackLayoutItem
+                        {
+                            Control = new StackLayout
+                            {
+                                Orientation = Orientation.Horizontal,
+                                Spacing = 5,
+                                VerticalContentAlignment = VerticalAlignment.Center,
+                                Items =
+                                {
+                                    new StackLayoutItem
+                                    {
                                         Control = new Label { Text = "Double-Click:", Width = 80, VerticalAlignment = VerticalAlignment.Center }
                                     },
                                     new StackLayoutItem
@@ -158,10 +193,26 @@ namespace OpenTabletDriver.UX.Controls
                     SyncSecondaryToStore();
                 };
 
+                _holdLiftDisplay.StoreChanged += (sender, e) =>
+                {
+                    if (_isUpdating) return;
+                    SyncSecondaryToStore();
+                };
+
                 _doubleClickDisplay.StoreChanged += (sender, e) =>
                 {
                     if (_isUpdating) return;
                     SyncSecondaryToStore();
+                };
+
+                _liftTriggerDropDown.SelectedValueChanged += (sender, e) =>
+                {
+                    if (_isUpdating) return;
+                    if (IsMultiAction(this.Store))
+                    {
+                        this.Store!["LiftTrigger"].SetValue(_liftTriggerDropDown.SelectedKey ?? "Button Release");
+                        StoreChanged?.Invoke(this, EventArgs.Empty);
+                    }
                 };
 
                 _holdThresholdBox.ValueChanged += (sender, e) =>
@@ -224,8 +275,9 @@ namespace OpenTabletDriver.UX.Controls
                 if (IsMultiAction(Store))
                 {
                     var hold = Store!.GetNestedStore("HoldAction");
+                    var holdLift = Store!.GetNestedStore("HoldLiftAction");
                     var dbl = Store!.GetNestedStore("DoubleClickAction");
-                    bool hasSecondary = hold != null || dbl != null;
+                    bool hasSecondary = hold != null || holdLift != null || dbl != null;
                     var tap = Store!.GetNestedStore("TapAction");
 
                     if (tap != null && hasSecondary)
@@ -257,9 +309,11 @@ namespace OpenTabletDriver.UX.Controls
         private readonly StackLayout _mainLayout;
 
         private readonly BindingDisplay? _holdDisplay;
+        private readonly BindingDisplay? _holdLiftDisplay;
         private readonly BindingDisplay? _doubleClickDisplay;
         private readonly FloatNumberBox? _holdThresholdBox;
         private readonly FloatNumberBox? _doubleClickWindowBox;
+        private readonly DropDown? _liftTriggerDropDown;
 
         private bool _isUpdating;
         private bool _allowSecondaryModes = true;
@@ -320,9 +374,10 @@ namespace OpenTabletDriver.UX.Controls
             if (IsMultiAction(Store))
             {
                 hasActiveSecondary = Store!.GetNestedStore("HoldAction") != null ||
+                                     Store!.GetNestedStore("HoldLiftAction") != null ||
                                      Store!.GetNestedStore("DoubleClickAction") != null;
             }
-            else if (_holdDisplay?.Store != null || _doubleClickDisplay?.Store != null)
+            else if (_holdDisplay?.Store != null || _holdLiftDisplay?.Store != null || _doubleClickDisplay?.Store != null)
             {
                 hasActiveSecondary = true;
             }
@@ -330,8 +385,8 @@ namespace OpenTabletDriver.UX.Controls
             string arrow = _secondaryPanel.Visible ? "▾" : "▸";
             _modesToggleButton.Text = hasActiveSecondary ? $"Modes* {arrow}" : $"Modes {arrow}";
             _modesToggleButton.ToolTip = hasActiveSecondary
-                ? "Secondary modes active (Hold / Double-Click). Click to toggle view."
-                : "Toggle secondary modes (Hold, Double-Click)";
+                ? "Secondary modes active (Hold / On Lift / Double-Click). Click to toggle view."
+                : "Toggle secondary modes (Hold, On Lift, Double-Click)";
         }
 
         private void UpdateControlsFromStore()
@@ -342,7 +397,7 @@ namespace OpenTabletDriver.UX.Controls
             _isUpdating = true;
             try
             {
-                if (!AllowSecondaryModes || _secondaryPanel == null || _holdDisplay == null || _doubleClickDisplay == null || _holdThresholdBox == null || _doubleClickWindowBox == null)
+                if (!AllowSecondaryModes || _secondaryPanel == null || _holdDisplay == null || _holdLiftDisplay == null || _doubleClickDisplay == null || _holdThresholdBox == null || _doubleClickWindowBox == null || _liftTriggerDropDown == null)
                 {
                     _mainButton.Text = store != null ? store.GetHumanReadableString() : "Unassigned";
                     return;
@@ -352,19 +407,23 @@ namespace OpenTabletDriver.UX.Controls
                 {
                     var tapStore = store!.GetNestedStore("TapAction");
                     var holdStore = store!.GetNestedStore("HoldAction");
+                    var holdLiftStore = store!.GetNestedStore("HoldLiftAction");
                     var dblStore = store!.GetNestedStore("DoubleClickAction");
 
                     float holdMs = GetFloatSetting(store!, "HoldThresholdMs", 400f);
                     float dblMs = GetFloatSetting(store!, "DoubleClickWindowMs", 250f);
+                    string liftTrigger = store!.Settings.FirstOrDefault(s => s.Property == "LiftTrigger")?.Value?.ToString() ?? "Button Release";
 
                     _mainButton.Text = tapStore != null ? tapStore.GetHumanReadableString() : "Unassigned";
 
                     _holdDisplay.Store = holdStore;
+                    _holdLiftDisplay.Store = holdLiftStore;
                     _doubleClickDisplay.Store = dblStore;
                     _holdThresholdBox.Value = holdMs;
                     _doubleClickWindowBox.Value = dblMs;
+                    _liftTriggerDropDown.SelectedKey = liftTrigger;
 
-                    bool hasSecondary = holdStore != null || dblStore != null;
+                    bool hasSecondary = holdStore != null || holdLiftStore != null || dblStore != null;
                     if (hasSecondary && !_secondaryPanel.Visible)
                     {
                         _secondaryPanel.Visible = true;
@@ -376,9 +435,11 @@ namespace OpenTabletDriver.UX.Controls
                     _mainButton.Text = store != null ? store.GetHumanReadableString() : "Unassigned";
 
                     _holdDisplay.Store = null;
+                    _holdLiftDisplay.Store = null;
                     _doubleClickDisplay.Store = null;
                     _holdThresholdBox.Value = 400f;
                     _doubleClickWindowBox.Value = 250f;
+                    _liftTriggerDropDown.SelectedKey = "Button Release";
                     UpdateModesButtonText();
                 }
             }
@@ -390,7 +451,7 @@ namespace OpenTabletDriver.UX.Controls
 
         private void ApplyMainStore(PluginSettingStore? newMainStore)
         {
-            if (!AllowSecondaryModes || _secondaryPanel == null || _holdDisplay == null || _doubleClickDisplay == null)
+            if (!AllowSecondaryModes || _secondaryPanel == null || _holdDisplay == null || _holdLiftDisplay == null || _doubleClickDisplay == null)
             {
                 this.Store = newMainStore;
                 return;
@@ -400,9 +461,10 @@ namespace OpenTabletDriver.UX.Controls
             {
                 Store!["TapAction"].SetValue(newMainStore);
                 var hold = Store!.GetNestedStore("HoldAction");
+                var holdLift = Store!.GetNestedStore("HoldLiftAction");
                 var dbl = Store!.GetNestedStore("DoubleClickAction");
 
-                if (hold == null && dbl == null)
+                if (hold == null && holdLift == null && dbl == null)
                 {
                     this.Store = newMainStore;
                 }
@@ -414,8 +476,9 @@ namespace OpenTabletDriver.UX.Controls
             else
             {
                 var holdStore = _holdDisplay?.Store;
+                var holdLiftStore = _holdLiftDisplay?.Store;
                 var dblStore = _doubleClickDisplay?.Store;
-                bool hasSecondary = holdStore != null || dblStore != null;
+                bool hasSecondary = holdStore != null || holdLiftStore != null || dblStore != null;
 
                 if (hasSecondary)
                 {
@@ -432,17 +495,20 @@ namespace OpenTabletDriver.UX.Controls
 
         private void SyncSecondaryToStore()
         {
-            if (!AllowSecondaryModes || _holdDisplay == null || _doubleClickDisplay == null || _holdThresholdBox == null || _doubleClickWindowBox == null)
+            if (!AllowSecondaryModes || _holdDisplay == null || _holdLiftDisplay == null || _doubleClickDisplay == null || _holdThresholdBox == null || _doubleClickWindowBox == null || _liftTriggerDropDown == null)
                 return;
 
             var holdStore = _holdDisplay.Store;
+            var holdLiftStore = _holdLiftDisplay.Store;
             var dblStore = _doubleClickDisplay.Store;
-            bool hasSecondary = holdStore != null || dblStore != null;
+            bool hasSecondary = holdStore != null || holdLiftStore != null || dblStore != null;
 
             if (hasSecondary)
             {
                 var multi = EnsureMultiActionStore();
                 multi["HoldAction"].SetValue(holdStore);
+                multi["HoldLiftAction"].SetValue(holdLiftStore);
+                multi["LiftTrigger"].SetValue(_liftTriggerDropDown.SelectedKey ?? "Button Release");
                 multi["DoubleClickAction"].SetValue(dblStore);
                 multi["HoldThresholdMs"].SetValue(_holdThresholdBox.Value > 0 ? _holdThresholdBox.Value : 400f);
                 multi["DoubleClickWindowMs"].SetValue(_doubleClickWindowBox.Value > 0 ? _doubleClickWindowBox.Value : 250f);
@@ -474,6 +540,7 @@ namespace OpenTabletDriver.UX.Controls
             float dblMs = _doubleClickWindowBox?.Value ?? 250f;
             multiStore["HoldThresholdMs"].SetValue(holdMs > 0 ? holdMs : 400f);
             multiStore["DoubleClickWindowMs"].SetValue(dblMs > 0 ? dblMs : 250f);
+            multiStore["LiftTrigger"].SetValue(_liftTriggerDropDown?.SelectedKey ?? "Button Release");
             return multiStore;
         }
 
@@ -507,7 +574,13 @@ namespace OpenTabletDriver.UX.Controls
             {
                 "OpenTabletDriver.Desktop.Binding.KeyBinding",
                 "OpenTabletDriver.Desktop.Binding.MultiKeyBinding",
-                "OpenTabletDriver.Desktop.Binding.MouseBinding"
+                "OpenTabletDriver.Desktop.Binding.MouseBinding",
+                "OpenTabletDriver.Desktop.Binding.ScrollUpBinding",
+                "OpenTabletDriver.Desktop.Binding.ScrollDownBinding",
+                "OpenTabletDriver.Desktop.Binding.ScrollLeftBinding",
+                "OpenTabletDriver.Desktop.Binding.ScrollRightBinding",
+                "OpenTabletDriver.Desktop.Binding.ZoomInBinding",
+                "OpenTabletDriver.Desktop.Binding.ZoomOutBinding"
             };
 
             return !simpleTypes.Contains(store.Path);

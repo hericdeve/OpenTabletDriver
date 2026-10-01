@@ -1,0 +1,144 @@
+using System;
+using System.Numerics;
+using System.Threading.Tasks;
+using OpenTabletDriver.Desktop.Binding;
+using OpenTabletDriver.Desktop.Reflection;
+using OpenTabletDriver.Plugin;
+using OpenTabletDriver.Plugin.Tablet;
+using Xunit;
+
+namespace OpenTabletDriver.Tests
+{
+    public class MultiActionBindingTests
+    {
+        public class MockStateBinding : IStateBinding
+        {
+            public int PressCount { get; private set; }
+            public int ReleaseCount { get; private set; }
+
+            public void Press(TabletReference tablet, IDeviceReport report) => PressCount++;
+            public void Release(TabletReference tablet, IDeviceReport report) => ReleaseCount++;
+        }
+
+        private class DummyTabletReport : IAbsolutePositionReport, ITabletReport
+        {
+            public Vector2 Position { get; set; }
+            public uint Pressure { get; set; }
+            public Vector2 Tilt { get; set; }
+            public bool[] PenButtons { get; set; } = new bool[2];
+            public byte[] Raw { get; set; } = Array.Empty<byte>();
+        }
+
+        private static TabletReference CreateDummyTablet()
+        {
+            return new TabletReference
+            {
+                Properties = new TabletConfiguration
+                {
+                    Name = "Test Tablet",
+                    DigitizerIdentifiers = [],
+                    Specifications = new TabletSpecifications
+                    {
+                        Pen = new PenSpecifications { ButtonCount = 2, MaxPressure = 8192 },
+                        Digitizer = new DigitizerSpecifications { Width = 1000, Height = 1000, MaxX = 1000, MaxY = 1000 }
+                    }
+                }
+            };
+        }
+
+        [Fact]
+        public async Task MultiActionBinding_HoldLiftAction_TriggersOnButtonRelease()
+        {
+            typeof(MultiActionBinding).GetField("_lastHoldActionFiredGlobal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                .SetValue(null, DateTime.MinValue);
+
+            var tablet = CreateDummyTablet();
+            var binding = new MultiActionBinding
+            {
+                HoldThresholdMs = 50f,
+                LiftTrigger = "Button Release"
+            };
+
+            var mockHold = new MockStateBinding();
+            var mockLift = new MockStateBinding();
+
+            binding.HoldAction = new PluginSettingStore(typeof(MockStateBinding));
+            binding.HoldLiftAction = new PluginSettingStore(typeof(MockStateBinding));
+
+            typeof(MultiActionBinding).GetField("_holdBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(binding, mockHold);
+            typeof(MultiActionBinding).GetField("_holdLiftBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(binding, mockLift);
+
+            var report = new DummyTabletReport { Pressure = 2000 };
+
+            // Press and hold past threshold
+            binding.Press(tablet, report);
+            var timeout = DateTime.UtcNow.AddSeconds(2);
+            while (mockHold.PressCount == 0 && DateTime.UtcNow < timeout)
+                await Task.Delay(10);
+
+            // Hold should have activated
+            Assert.Equal(1, mockHold.PressCount);
+            Assert.Equal(0, mockLift.PressCount);
+
+            // Release button
+            binding.Release(tablet, report);
+
+            // Hold released, Lift action evoked
+            Assert.Equal(1, mockHold.ReleaseCount);
+            Assert.Equal(1, mockLift.PressCount);
+            Assert.Equal(1, mockLift.ReleaseCount);
+        }
+
+        [Fact]
+        public async Task MultiActionBinding_HoldLiftAction_TriggersOnPenTipLift()
+        {
+            typeof(MultiActionBinding).GetField("_lastHoldActionFiredGlobal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                .SetValue(null, DateTime.MinValue);
+
+            var tablet = CreateDummyTablet();
+            var binding = new MultiActionBinding
+            {
+                HoldThresholdMs = 50f,
+                LiftTrigger = "Pen Tip Lift"
+            };
+
+            var mockHold = new MockStateBinding();
+            var mockLift = new MockStateBinding();
+
+            binding.HoldAction = new PluginSettingStore(typeof(MockStateBinding));
+            binding.HoldLiftAction = new PluginSettingStore(typeof(MockStateBinding));
+
+            typeof(MultiActionBinding).GetField("_holdBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(binding, mockHold);
+            typeof(MultiActionBinding).GetField("_holdLiftBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(binding, mockLift);
+
+            var downReport = new DummyTabletReport { Pressure = 2000 };
+
+            // Press and hold with pen touching
+            binding.Press(tablet, downReport);
+            var timeout = DateTime.UtcNow.AddSeconds(2);
+            while (mockHold.PressCount == 0 && DateTime.UtcNow < timeout)
+                await Task.Delay(10);
+
+            Assert.Equal(1, mockHold.PressCount);
+            Assert.Equal(0, mockLift.PressCount);
+
+            // Pen tip lifts while button held
+            var upReport = new DummyTabletReport { Pressure = 0 };
+            binding.Update(tablet, upReport);
+
+            // Lift action fired immediately
+            Assert.Equal(1, mockLift.PressCount);
+            Assert.Equal(1, mockLift.ReleaseCount);
+
+            // Subsequent button release does not double-fire lift action
+            binding.Release(tablet, upReport);
+            Assert.Equal(1, mockHold.ReleaseCount);
+            Assert.Equal(1, mockLift.PressCount);
+            Assert.Equal(1, mockLift.ReleaseCount);
+        }
+    }
+}

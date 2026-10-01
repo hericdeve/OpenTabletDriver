@@ -4,6 +4,7 @@ namespace OpenTabletDriver.Native.Linux.Evdev
     {
         INPUT_PROP_POINTER = 0x00,
         INPUT_PROP_DIRECT = 0x01,
+        INPUT_PROP_BUTTONPAD = 0x02,
     }
 
     public enum EventType : uint

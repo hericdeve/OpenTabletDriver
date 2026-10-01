@@ -35,6 +35,11 @@ namespace OpenTabletDriver.Plugin.Output
         public bool DisablePressure { set; get; }
 
         /// <summary>
+        /// Whether stroke pressure should be constant (uniform) rather than variable
+        /// </summary>
+        public bool UniformStrokePressure { set; get; }
+
+        /// <summary>
         /// Whether to disable tilt
         /// </summary>
         public bool DisableTilt { set; get; }

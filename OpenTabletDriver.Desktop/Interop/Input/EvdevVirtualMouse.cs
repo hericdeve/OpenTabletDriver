@@ -26,14 +26,31 @@ namespace OpenTabletDriver.Desktop.Interop
             }
         }
 
+        private int _vWheelAccumulator;
+        private int _hWheelAccumulator;
+
         public void ScrollVertically(int amount)
         {
             Device.Write(EventType.EV_REL, EventCode.REL_WHEEL_HI_RES, amount);
+            _vWheelAccumulator += amount;
+            int detents = _vWheelAccumulator / 120;
+            if (detents != 0)
+            {
+                Device.Write(EventType.EV_REL, EventCode.REL_WHEEL, detents);
+                _vWheelAccumulator %= 120;
+            }
         }
 
         public void ScrollHorizontally(int amount)
         {
             Device.Write(EventType.EV_REL, EventCode.REL_HWHEEL_HI_RES, amount);
+            _hWheelAccumulator += amount;
+            int detents = _hWheelAccumulator / 120;
+            if (detents != 0)
+            {
+                Device.Write(EventType.EV_REL, EventCode.REL_HWHEEL, detents);
+                _hWheelAccumulator %= 120;
+            }
         }
 
         protected virtual EventCode? GetCode(MouseButton button) => button switch
@@ -71,6 +88,8 @@ namespace OpenTabletDriver.Desktop.Interop
 
         public virtual void Reset()
         {
+            _vWheelAccumulator = 0;
+            _hWheelAccumulator = 0;
         }
     }
 }

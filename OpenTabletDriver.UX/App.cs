@@ -38,6 +38,8 @@ namespace OpenTabletDriver.UX
         public bool IsActive { get; private set; } = true;
 
         public static event Action? Initialized;
+        public static event Action? Terminating;
+        public static bool IsTerminating { get; set; }
 
         public static void Run(string platform, string[] args)
         {
@@ -74,21 +76,18 @@ namespace OpenTabletDriver.UX
             if (options.StartMinimized)
             {
                 mainForm.WindowState = WindowState.Minimized;
-                if (EnableTrayIcon)
+                try
                 {
-                    try
-                    {
-                        if (!mainForm.Visible)
-                            mainForm.Show();
-                        mainForm.Visible = true;
-                        mainForm.WindowState = WindowState.Minimized;
-                        mainForm.ShowInTaskbar = false;
-                        mainForm.Visible = false;
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Exception(ex);
-                    }
+                    if (!mainForm.Visible)
+                        mainForm.Show();
+                    mainForm.Visible = true;
+                    mainForm.WindowState = WindowState.Minimized;
+                    mainForm.ShowInTaskbar = false;
+                    mainForm.Visible = false;
+                }
+                catch (Exception ex)
+                {
+                    Log.Exception(ex);
                 }
             }
 
@@ -97,7 +96,12 @@ namespace OpenTabletDriver.UX
 
             app.NotificationActivated += Current.HandleNotification;
             app.UnhandledException += ShowUnhandledException;
-            app.Terminating += async (sender, args) => await Current.Canceler.CancelAsync();
+            app.Terminating += async (sender, args) =>
+            {
+                IsTerminating = true;
+                Terminating?.Invoke();
+                await Current.Canceler.CancelAsync();
+            };
 
             Task.Run(async () =>
             {
@@ -120,9 +124,12 @@ namespace OpenTabletDriver.UX
                         {
                             try
                             {
+                                if (mainForm.WindowState == WindowState.Minimized)
+                                    mainForm.WindowState = WindowState.Normal;
                                 if (!mainForm.Visible)
                                     mainForm.Show();
                                 mainForm.BringToFront();
+                                mainForm.Focus();
                             }
                             catch (Exception ex)
                             {
@@ -235,7 +242,23 @@ namespace OpenTabletDriver.UX
                 handler.Invoke();
         }
 
-        private void HandleClosing(object sender, CancelEventArgs args)
+        private void HandleClosing(object? sender, CancelEventArgs args)
+        {
+            if (!IsTerminating)
+            {
+                args.Cancel = true;
+                if (sender is Form form)
+                {
+                    form.Visible = false;
+                }
+                CloseAuxiliaryWindows();
+                return;
+            }
+
+            CloseAuxiliaryWindows();
+        }
+
+        private void CloseAuxiliaryWindows()
         {
             StartupGreeterWindow.Close();
             PluginManagerWindow.Close();

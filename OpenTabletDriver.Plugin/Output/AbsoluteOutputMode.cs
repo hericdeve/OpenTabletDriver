@@ -152,8 +152,17 @@ namespace OpenTabletDriver.Plugin.Output
                 rotationHandler.SetRotation((rotationReport.Rotation - (float)Tablet.Properties.Specifications.Pen.MinRotation!) / rotationRange);
             }
             if (report is ITabletReport tabletReport && Pointer is IPressureHandler pressureHandler &&
-                !DisablePressure && Tablet?.Properties.Specifications.Pen != null)
-                pressureHandler.SetPressure(tabletReport.Pressure / (float)Tablet.Properties.Specifications.Pen.MaxPressure);
+                Tablet?.Properties.Specifications.Pen != null)
+            {
+                if (DisablePressure || UniformStrokePressure)
+                {
+                    pressureHandler.SetPressure(tabletReport.Pressure > 0 ? 1.0f : 0.0f);
+                }
+                else
+                {
+                    pressureHandler.SetPressure(tabletReport.Pressure / (float)Tablet.Properties.Specifications.Pen.MaxPressure);
+                }
+            }
 
             // make sure to set the position last
             if (Pointer != null && report is IAbsolutePositionReport absReport)

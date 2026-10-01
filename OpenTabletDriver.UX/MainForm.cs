@@ -212,8 +212,11 @@ namespace OpenTabletDriver.UX
 
                 this.Closing += (sender, e) =>
                 {
-                    App.DaemonWatchdog?.Dispose();
-                    App.DaemonWatchdog = null;
+                    if (App.IsTerminating)
+                    {
+                        App.DaemonWatchdog?.Dispose();
+                        App.DaemonWatchdog = null;
+                    }
                 };
             }
         }
@@ -1127,7 +1130,10 @@ namespace OpenTabletDriver.UX
 
         protected override void OnClosing(CancelEventArgs e)
         {
-            App.Driver.Disconnected -= HandleDaemonDisconnected;
+            if (App.IsTerminating)
+            {
+                App.Driver.Disconnected -= HandleDaemonDisconnected;
+            }
             base.OnClosing(e);
         }
     }

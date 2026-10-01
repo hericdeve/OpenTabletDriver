@@ -50,6 +50,50 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                                         Orientation = Orientation.Horizontal,
                                                         Content = tipThreshold = new FloatSlider(),
                                                         Unit = "%"
+                                                    },
+                                                    new Group
+                                                    {
+                                                        Text = "Deep Press Action",
+                                                        TitleWidth = 110,
+                                                        TitleVerticalAlignment = VerticalAlignment.Top,
+                                                        ExpandContent = true,
+                                                        Orientation = Orientation.Horizontal,
+                                                        ToolTip = "Secondary action executed when pressing firmly past the deep press threshold (e.g. Right Click, Floating HUD)",
+                                                        Content = tipDeepPressButton = new BindingDisplay()
+                                                    },
+                                                    new UnitGroup
+                                                    {
+                                                        Text = "Deep Press Threshold",
+                                                        ToolTip = "Pressure percentage required to activate the deep press action.",
+                                                        Orientation = Orientation.Horizontal,
+                                                        Content = tipDeepPressThreshold = new FloatSlider
+                                                        {
+                                                            Minimum = 50,
+                                                            Maximum = 98
+                                                        },
+                                                        Unit = "%"
+                                                    },
+                                                    new UnitGroup
+                                                    {
+                                                        Text = "Deep Press Delay",
+                                                        ToolTip = "Duration in milliseconds the deep press force must be held before activating to prevent misfires during quick downstrokes.",
+                                                        Orientation = Orientation.Horizontal,
+                                                        Content = tipDeepPressDelay = new FloatSlider
+                                                        {
+                                                            Minimum = 0,
+                                                            Maximum = 300,
+                                                            StepSize = 10
+                                                        },
+                                                        Unit = "ms"
+                                                    },
+                                                    new Group
+                                                    {
+                                                        Orientation = Orientation.Horizontal,
+                                                        ToolTip = "Suppresses the normal drawing stroke when deep press is engaged to prevent ink marks on context menus",
+                                                        Content = tipDeepPressSuppressStroke = new CheckBox
+                                                        {
+                                                            Text = "Suppress Stroke on Deep Press"
+                                                        }
                                                     }
                                                 }
                                             }
@@ -116,6 +160,13 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                     },
                                     new Group {
                                         Orientation = Orientation.Horizontal,
+                                        ToolTip = "Locks drawing stroke pressure to constant 100% for uniform handwriting and circuit lines",
+                                        Content = uniformStrokePressure = new CheckBox {
+                                            Text = "Uniform Stroke Pressure",
+                                        }
+                                    },
+                                    new Group {
+                                        Orientation = Orientation.Horizontal,
                                         ToolTip = "Disable tilt if it is available",
                                         Content = disableTilt = new CheckBox {
                                             Text = "Disable Tilt",
@@ -143,19 +194,24 @@ namespace OpenTabletDriver.UX.Controls.Bindings
             };
 
             tipButton.StoreBinding.Bind(SettingsBinding.Child(c => c.TipButton));
+            tipDeepPressButton.StoreBinding.Bind(SettingsBinding.Child(c => c.TipDeepPressButton));
+            tipDeepPressThreshold.ValueBinding.Bind(SettingsBinding.Child(c => c.TipDeepPressThreshold));
+            tipDeepPressDelay.ValueBinding.Bind(SettingsBinding.Child(c => c.TipDeepPressHoldDelayMs));
+            tipDeepPressSuppressStroke.CheckedBinding.Cast<bool>().Bind(SettingsBinding.Child(c => c.TipDeepPressSuppressStroke));
             eraserButton.StoreBinding.Bind(SettingsBinding.Child(c => c.EraserButton));
             tipThreshold.ValueBinding.Bind(SettingsBinding.Child(c => c.TipActivationThreshold));
             eraserThreshold.ValueBinding.Bind(SettingsBinding.Child(c => c.EraserActivationThreshold));
             penButtons.ItemSourceBinding.Bind(SettingsBinding.Child(c => (IList<PluginSettingStore>)c.PenButtons)!);
             disablePressure.CheckedBinding.Cast<bool>().Bind(SettingsBinding.Child(c => c.DisablePressure));
+            uniformStrokePressure.CheckedBinding.Cast<bool>().Bind(SettingsBinding.Child(c => c.UniformStrokePressure));
             disableTilt.CheckedBinding.Cast<bool>().Bind(SettingsBinding.Child(c => c.DisableTilt));
             disableRotation.CheckedBinding.Cast<bool>().Bind(SettingsBinding.Child(c => c.DisableRotation));
             enableDragBindings.CheckedBinding.Cast<bool>().Bind(SettingsBinding.Child(c => c.EnableDragBindings));
         }
 
-        private BindingDisplay tipButton, eraserButton;
-        private FloatSlider tipThreshold, eraserThreshold;
-        private CheckBox disablePressure, disableTilt, disableRotation, enableDragBindings;
+        private BindingDisplay tipButton, tipDeepPressButton, eraserButton;
+        private FloatSlider tipThreshold, tipDeepPressThreshold, tipDeepPressDelay, eraserThreshold;
+        private CheckBox tipDeepPressSuppressStroke, disablePressure, uniformStrokePressure, disableTilt, disableRotation, enableDragBindings;
         private BindingDisplayList penButtons;
     }
 }

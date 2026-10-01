@@ -1,5 +1,6 @@
 using System.Numerics;
 using OpenTabletDriver.Desktop.Binding;
+using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Tablet;
 using Xunit;
 
@@ -351,6 +352,80 @@ namespace OpenTabletDriver.Tests
                 Position = new Vector2(300, 100)
             });
             Assert.Equal(new Vector2(230, 100), ((IAbsolutePositionReport)emittedReport!).Position);
+        }
+
+        public class MockStateBinding : IStateBinding
+        {
+            public int PressCount { get; private set; }
+            public int ReleaseCount { get; private set; }
+
+            public void Press(TabletReference tablet, IDeviceReport report) => PressCount++;
+            public void Release(TabletReference tablet, IDeviceReport report) => ReleaseCount++;
+        }
+
+        [Fact]
+        public void PrecisionMode_Hold_WithLiftAction_TriggersOnButtonRelease()
+        {
+            var tablet = CreateDummyTablet();
+            var precisionBinding = new PrecisionModeBinding
+            {
+                Mode = "Hold",
+                LiftTrigger = "Button Release"
+            };
+
+            var mockLiftBinding = new MockStateBinding();
+            var liftStore = new Desktop.Reflection.PluginSettingStore(typeof(MockStateBinding));
+            precisionBinding.OnLiftAction = liftStore;
+
+            // We simulate dependency injection
+            typeof(PrecisionModeBinding).GetField("_onLiftBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(precisionBinding, mockLiftBinding);
+
+            var report = new DummyTabletReport { Pressure = 2000 };
+
+            precisionBinding.Press(tablet, report);
+            Assert.True(precisionBinding.IsActive);
+            Assert.Equal(0, mockLiftBinding.PressCount);
+
+            precisionBinding.Release(tablet, report);
+            Assert.False(precisionBinding.IsActive);
+            Assert.Equal(1, mockLiftBinding.PressCount);
+            Assert.Equal(1, mockLiftBinding.ReleaseCount);
+        }
+
+        [Fact]
+        public void PrecisionMode_Hold_WithLiftAction_TriggersOnPenTipLift()
+        {
+            var tablet = CreateDummyTablet();
+            var precisionBinding = new PrecisionModeBinding
+            {
+                Mode = "Hold",
+                LiftTrigger = "Pen Tip Lift"
+            };
+
+            var mockLiftBinding = new MockStateBinding();
+            var liftStore = new Desktop.Reflection.PluginSettingStore(typeof(MockStateBinding));
+            precisionBinding.OnLiftAction = liftStore;
+
+            typeof(PrecisionModeBinding).GetField("_onLiftBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(precisionBinding, mockLiftBinding);
+
+            var downReport = new DummyTabletReport { Pressure = 2000 };
+            precisionBinding.Press(tablet, downReport);
+            Assert.True(precisionBinding.IsActive);
+            Assert.Equal(0, mockLiftBinding.PressCount);
+
+            // Stylus lifts off screen while button still held
+            var upReport = new DummyTabletReport { Pressure = 0 };
+            precisionBinding.Update(tablet, upReport);
+            Assert.Equal(1, mockLiftBinding.PressCount);
+            Assert.Equal(1, mockLiftBinding.ReleaseCount);
+
+            // Releasing the button afterwards does not duplicate the lift action
+            precisionBinding.Release(tablet, upReport);
+            Assert.False(precisionBinding.IsActive);
+            Assert.Equal(1, mockLiftBinding.PressCount);
+            Assert.Equal(1, mockLiftBinding.ReleaseCount);
         }
     }
 }

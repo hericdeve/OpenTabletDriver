@@ -156,6 +156,7 @@ namespace OpenTabletDriver.Desktop.Reflection
                 var tap = GetNestedStore("TapAction");
                 var dbl = GetNestedStore("DoubleClickAction");
                 var hold = GetNestedStore("HoldAction");
+                var lift = GetNestedStore("HoldLiftAction");
 
                 var parts = new List<string>();
                 if (tap != null)
@@ -164,6 +165,8 @@ namespace OpenTabletDriver.Desktop.Reflection
                     parts.Add($"Double: {FormatCompactAction(dbl)}");
                 if (hold != null)
                     parts.Add($"Hold: {FormatCompactAction(hold)}");
+                if (lift != null)
+                    parts.Add($"Lift: {FormatCompactAction(lift)}");
 
                 if (parts.Count > 0)
                     return $"Multi-Action: {string.Join(" • ", parts)}";
@@ -176,9 +179,12 @@ namespace OpenTabletDriver.Desktop.Reflection
                 var sens = Settings.FirstOrDefault(s => s.Property == "Sensitivity")?.Value?.ToString() ?? "30";
                 var mode = Settings.FirstOrDefault(s => s.Property == "Mode")?.Value?.ToString() ?? "Hold";
                 var resetOnLift = Settings.FirstOrDefault(s => s.Property == "Reset on Lift")?.Value?.ToString();
+                var liftAction = GetNestedStore("OnLiftAction");
+                string liftStr = liftAction != null ? $", Lift: {FormatCompactAction(liftAction)}" : "";
+
                 if (string.Equals(resetOnLift, "false", StringComparison.OrdinalIgnoreCase))
-                    return $"Precision Mode: {sens}% ({mode}, Fixed Center)";
-                return $"Precision Mode: {sens}% ({mode})";
+                    return $"Precision Mode: {sens}% ({mode}, Fixed Center{liftStr})";
+                return $"Precision Mode: {sens}% ({mode}{liftStr})";
             }
 
             // 3. PanScrollBinding
@@ -194,6 +200,9 @@ namespace OpenTabletDriver.Desktop.Reflection
             {
                 var tool = Settings.FirstOrDefault(s => s.Property == "Tool")?.Value?.ToString() ?? "Tool";
                 var mode = Settings.FirstOrDefault(s => s.Property == "Mode")?.Value?.ToString() ?? "Hold";
+                var lift = Settings.FirstOrDefault(s => s.Property == "On Lift Action" || s.Property == "OnLiftAction")?.Value?.ToString();
+                if (!string.IsNullOrEmpty(lift) && !string.Equals(lift, "None", StringComparison.OrdinalIgnoreCase))
+                    return $"Tool Action: {tool} ({mode}, Lift: {lift})";
                 return $"Tool Action: {tool} ({mode})";
             }
 
@@ -213,7 +222,32 @@ namespace OpenTabletDriver.Desktop.Reflection
                     return $"Mouse: {btn}";
             }
 
-            // 6. Generic formatted fallback
+            // 6. MouseScrollBinding / Dedicated Scroll Bindings
+            if (Path == "OpenTabletDriver.Desktop.Binding.ScrollUpBinding")
+                return "Scroll Up";
+            if (Path == "OpenTabletDriver.Desktop.Binding.ScrollDownBinding")
+                return "Scroll Down";
+            if (Path == "OpenTabletDriver.Desktop.Binding.ScrollLeftBinding")
+                return "Scroll Left";
+            if (Path == "OpenTabletDriver.Desktop.Binding.ScrollRightBinding")
+                return "Scroll Right";
+            if (Path == "OpenTabletDriver.Desktop.Binding.ZoomInBinding")
+                return "Zoom In";
+            if (Path == "OpenTabletDriver.Desktop.Binding.ZoomOutBinding")
+                return "Zoom Out";
+            if (Path == "OpenTabletDriver.Desktop.Binding.ZoomBinding")
+            {
+                var dir = Settings.FirstOrDefault(s => s.Property == "Direction")?.Value?.ToString() ?? "In";
+                return $"Zoom {dir}";
+            }
+            if (Path == "OpenTabletDriver.Desktop.Binding.MouseScrollBinding")
+            {
+                var dir = Settings.FirstOrDefault(s => s.Property == "Direction")?.Value?.ToString() ?? "Vertical";
+                var invert = Settings.FirstOrDefault(s => s.Property == "Invert")?.Value?.ToString()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+                return $"Scroll {dir}{(invert ? " (Inverted)" : "")}";
+            }
+
+            // 7. Generic formatted fallback
             var validSettings = Settings.Where(s => s.HasValue && s.Value != null).ToList();
             if (validSettings.Count == 0)
                 return name;
@@ -257,6 +291,21 @@ namespace OpenTabletDriver.Desktop.Reflection
             var mouseBtn = store.Settings.FirstOrDefault(s => s.Property == "Button")?.Value?.ToString();
             if (!string.IsNullOrEmpty(mouseBtn))
                 return $"{mouseBtn} Click";
+
+            // If scroll bindings
+            if (store.Path?.EndsWith("ScrollUpBinding") == true)
+                return "Scroll Up";
+            if (store.Path?.EndsWith("ScrollDownBinding") == true)
+                return "Scroll Down";
+            if (store.Path?.EndsWith("ScrollLeftBinding") == true)
+                return "Scroll Left";
+            if (store.Path?.EndsWith("ScrollRightBinding") == true)
+                return "Scroll Right";
+            if (store.Path?.EndsWith("MouseScrollBinding") == true)
+            {
+                var dir = store.Settings.FirstOrDefault(s => s.Property == "Direction")?.Value?.ToString() ?? "Vertical";
+                return $"Scroll {dir}";
+            }
 
             // If precision mode
             if (store.Path?.EndsWith("PrecisionModeBinding") == true)

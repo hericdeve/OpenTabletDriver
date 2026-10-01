@@ -1,4 +1,5 @@
 using System;
+using OpenTabletDriver.Plugin;
 using OpenTabletDriver.UX.Gtk.Hud;
 
 namespace OpenTabletDriver.UX.Gtk
@@ -11,6 +12,22 @@ namespace OpenTabletDriver.UX.Gtk
             App.Initialized += () =>
             {
                 HudManager.Instance.Initialize();
+            };
+
+            App.Terminating += () =>
+            {
+                GLib.Idle.Add(() =>
+                {
+                    try
+                    {
+                        HudManager.Instance.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Exception(ex);
+                    }
+                    return false;
+                });
             };
 
             App.Run(Eto.Platforms.Gtk, args);
