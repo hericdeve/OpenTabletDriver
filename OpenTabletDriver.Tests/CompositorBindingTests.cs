@@ -149,5 +149,35 @@ namespace OpenTabletDriver.Tests
             Assert.Equal("Move to Workspace 3", storeMove.GetHumanReadableString());
             Assert.Equal("Move -> WS 3", PluginSettingStore.FormatCompactAction(storeMove));
         }
+
+        [Fact]
+        public void CompositorHudBindings_HaveHudOnlyBindingAttribute_AndCorrectNames()
+        {
+            var switchType = typeof(CompositorWorkspaceHudBinding);
+            var moveType = typeof(CompositorMoveWindowHudBinding);
+
+            Assert.True(switchType.GetCustomAttributes(typeof(HudOnlyBindingAttribute), false).Any());
+            Assert.True(moveType.GetCustomAttributes(typeof(HudOnlyBindingAttribute), false).Any());
+
+            var switchName = switchType.GetCustomAttributes(typeof(PluginNameAttribute), false)
+                .Cast<PluginNameAttribute>()
+                .FirstOrDefault();
+            Assert.NotNull(switchName);
+            Assert.Equal("Workspace Switcher (HUD Layer)", switchName.Name);
+
+            var moveName = moveType.GetCustomAttributes(typeof(PluginNameAttribute), false)
+                .Cast<PluginNameAttribute>()
+                .FirstOrDefault();
+            Assert.NotNull(moveName);
+            Assert.Equal("Move Window to Workspace (HUD Layer)", moveName.Name);
+
+            var switchStore = new PluginSettingStore(new CompositorWorkspaceHudBinding());
+            var moveStore = new PluginSettingStore(new CompositorMoveWindowHudBinding());
+
+            Assert.Equal("Workspace Switcher (HUD Layer)", switchStore.GetHumanReadableString());
+            Assert.Equal("Move Window to Workspace (HUD Layer)", moveStore.GetHumanReadableString());
+            Assert.Equal("Switch Workspace", PluginSettingStore.FormatCompactAction(switchStore));
+            Assert.Equal("Move Window to WS", PluginSettingStore.FormatCompactAction(moveStore));
+        }
     }
 }

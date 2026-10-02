@@ -7,6 +7,7 @@ namespace OpenTabletDriver.Desktop.Hud
         MouseClick = 2,
         ShellCommand = 3,
         Tool = 4,
-        WorkspaceLayer = 5
+        WorkspaceLayer = 5,
+        MoveWindowWorkspaceLayer = 6
     }
 }

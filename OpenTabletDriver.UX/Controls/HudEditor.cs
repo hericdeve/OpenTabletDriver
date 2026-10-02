@@ -222,7 +222,7 @@ namespace OpenTabletDriver.UX.Controls
                 };
                 _labelBoxes.Add(labelBox);
 
-                var bindingDisplay = new BindingDisplay(allowSecondaryModes: false);
+                var bindingDisplay = new BindingDisplay(allowSecondaryModes: false) { IsHudBinding = true };
                 bindingDisplay.StoreChanged += (s, e) =>
                 {
                     if (_isUpdating) return;

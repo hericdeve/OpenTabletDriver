@@ -20,7 +20,9 @@ namespace OpenTabletDriver.Desktop.Hud
         [JsonIgnore]
         public bool IsSubLayer =>
             (Action?.Type == HudActionType.WorkspaceLayer && string.IsNullOrWhiteSpace(Action?.Value))
-            || (Binding?.Path?.Contains("CompositorWorkspaceHudBinding") == true && string.IsNullOrWhiteSpace(Action?.Value));
+            || (Action?.Type == HudActionType.MoveWindowWorkspaceLayer && string.IsNullOrWhiteSpace(Action?.Value))
+            || (Binding?.Path?.Contains("CompositorWorkspaceHudBinding") == true && string.IsNullOrWhiteSpace(Action?.Value))
+            || (Binding?.Path?.Contains("CompositorMoveWindowHudBinding") == true && string.IsNullOrWhiteSpace(Action?.Value));
 
         public PluginSettingStore? GetEffectiveBinding()
         {
@@ -36,6 +38,10 @@ namespace OpenTabletDriver.Desktop.Hud
                     new PluginSettingStore(new CompositorWorkspaceHudBinding()),
                 HudActionType.WorkspaceLayer when !string.IsNullOrWhiteSpace(Action.Value) =>
                     new PluginSettingStore(new WorkspaceControlBinding { Target = Action.Value, Action = "Focus Workspace" }),
+                HudActionType.MoveWindowWorkspaceLayer when string.IsNullOrWhiteSpace(Action.Value) =>
+                    new PluginSettingStore(new CompositorMoveWindowHudBinding()),
+                HudActionType.MoveWindowWorkspaceLayer when !string.IsNullOrWhiteSpace(Action.Value) =>
+                    new PluginSettingStore(new WorkspaceControlBinding { Target = Action.Value, Action = "Move Window to Workspace" }),
                 HudActionType.KeySequence when !string.IsNullOrWhiteSpace(Action.Value) =>
                     new PluginSettingStore(new MultiKeyBinding { Keys = Action.Value }),
                 HudActionType.DriverCommand when Action.Value == "DisplayToggle" =>
@@ -99,6 +105,14 @@ namespace OpenTabletDriver.Desktop.Hud
                 Action = new HudAction
                 {
                     Type = HudActionType.WorkspaceLayer,
+                    Value = null
+                };
+            }
+            else if (Binding.Path == typeof(CompositorMoveWindowHudBinding).FullName || Binding.Path?.Contains("CompositorMoveWindowHudBinding") == true)
+            {
+                Action = new HudAction
+                {
+                    Type = HudActionType.MoveWindowWorkspaceLayer,
                     Value = null
                 };
             }

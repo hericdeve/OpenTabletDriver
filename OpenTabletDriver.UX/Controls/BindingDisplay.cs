@@ -76,7 +76,7 @@ namespace OpenTabletDriver.UX.Controls
                 PluginSettingStore? newStore;
                 if (IsComplexBinding(currentMainStore))
                 {
-                    var dialog = new AdvancedBindingEditorDialog(currentMainStore);
+                    var dialog = new AdvancedBindingEditorDialog(currentMainStore, allowHudOnly: _isHudBinding);
                     newStore = await dialog.ShowModalAsync(this);
                 }
                 else
@@ -104,7 +104,7 @@ namespace OpenTabletDriver.UX.Controls
                     ? Store!.GetNestedStore("TapAction")
                     : Store;
 
-                var dialog = new AdvancedBindingEditorDialog(targetStore);
+                var dialog = new AdvancedBindingEditorDialog(targetStore, allowHudOnly: _isHudBinding);
                 var result = await dialog.ShowModalAsync(this);
                 ApplyMainStore(result);
             };
@@ -149,6 +149,13 @@ namespace OpenTabletDriver.UX.Controls
         private bool _isUpdating;
         private bool _allowCapabilities = true;
         private bool _allowDeepClick;
+        private bool _isHudBinding;
+
+        public bool IsHudBinding
+        {
+            get => _isHudBinding;
+            set => _isHudBinding = value;
+        }
 
         public bool AllowSecondaryModes
         {

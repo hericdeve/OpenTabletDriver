@@ -156,9 +156,9 @@ namespace OpenTabletDriver.UX.Gtk.Hud
             _hoveredSlice = hoveredSlice;
         }
 
-        public void SwitchToWorkspaceLayer()
+        public void SwitchToWorkspaceLayer(bool isMoveWindow = false)
         {
-            _ = App.Driver.Instance?.SwitchToWorkspaceSubLayer();
+            _ = App.Driver.Instance?.SwitchToWorkspaceSubLayer(isMoveWindow);
         }
 
         public void RestoreRootMenu()
@@ -425,6 +425,13 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                 string badgeText = string.Empty;
                 string labelText = rawText;
 
+                bool isMoveAction = false;
+                if (rawText.StartsWith("-> "))
+                {
+                    isMoveAction = true;
+                    rawText = rawText.Substring(3).Trim();
+                }
+
                 if (rawText.StartsWith("[") && rawText.Contains("]"))
                 {
                     int endIdx = rawText.IndexOf(']');
@@ -434,7 +441,7 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                 else if (rawText.StartsWith("WS "))
                 {
                     badgeText = rawText.Substring(3).Trim();
-                    labelText = string.Empty;
+                    labelText = isMoveAction ? "Move" : string.Empty;
                 }
 
                 cr.SelectFontFace(fontFamily, FontSlant.Normal, (bloom > 0.4f) ? FontWeight.Bold : FontWeight.Normal);
@@ -603,7 +610,9 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                     if (item.IsSubLayer)
                     {
                         // Expand into workspace layer
-                        SwitchToWorkspaceLayer();
+                        bool isMove = item.Action?.Type == HudActionType.MoveWindowWorkspaceLayer ||
+                                      item.Binding?.Path?.Contains("CompositorMoveWindowHudBinding") == true;
+                        SwitchToWorkspaceLayer(isMove);
                         return;
                     }
 

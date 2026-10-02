@@ -949,11 +949,15 @@ namespace OpenTabletDriver.Daemon
 
             if (item.Action?.Type == HudActionType.WorkspaceLayer || item.Binding?.Path?.Contains("CompositorWorkspaceHudBinding") == true)
             {
-                await SwitchToWorkspaceSubLayer();
+                await SwitchToWorkspaceSubLayer(isMoveWindow: false);
+            }
+            else if (item.Action?.Type == HudActionType.MoveWindowWorkspaceLayer || item.Binding?.Path?.Contains("CompositorMoveWindowHudBinding") == true)
+            {
+                await SwitchToWorkspaceSubLayer(isMoveWindow: true);
             }
         }
 
-        public async Task SwitchToWorkspaceSubLayer()
+        public async Task SwitchToWorkspaceSubLayer(bool isMoveWindow = false)
         {
             try
             {
@@ -981,12 +985,25 @@ namespace OpenTabletDriver.Daemon
 
                     int maxSlots = Settings?.CompositorSettings?.MaxHudWorkspaceSlots ?? 8;
                     var displayWorkspaces = workspaces.Take(maxSlots).ToList();
+                    var actionType = isMoveWindow ? HudActionType.MoveWindowWorkspaceLayer : HudActionType.WorkspaceLayer;
 
                     foreach (var ws in displayWorkspaces)
                     {
-                        var label = string.IsNullOrWhiteSpace(ws.LastWindowTitle)
+                        var baseTitle = string.IsNullOrWhiteSpace(ws.LastWindowTitle)
                             ? $"WS {ws.Name}"
                             : $"[{ws.Name}] {ws.LastWindowTitle}";
+
+                        string label;
+                        if (isMoveWindow)
+                        {
+                            label = string.IsNullOrWhiteSpace(ws.LastWindowTitle)
+                                ? $"-> WS {ws.Name}"
+                                : $"-> [{ws.Name}] {ws.LastWindowTitle}";
+                        }
+                        else
+                        {
+                            label = baseTitle;
+                        }
 
                         if (label.Length > 16)
                             label = label.Substring(0, 14) + "..";
@@ -999,7 +1016,7 @@ namespace OpenTabletDriver.Daemon
                             Label = label,
                             Action = new HudAction
                             {
-                                Type = HudActionType.WorkspaceLayer,
+                                Type = actionType,
                                 Value = ws.Id
                             }
                         });
@@ -1011,10 +1028,10 @@ namespace OpenTabletDriver.Daemon
                         {
                             wsConfig.Items.Add(new HudItem
                             {
-                                Label = $"WS {i}",
+                                Label = isMoveWindow ? $"-> WS {i}" : $"WS {i}",
                                 Action = new HudAction
                                 {
-                                    Type = HudActionType.WorkspaceLayer,
+                                    Type = actionType,
                                     Value = i.ToString()
                                 }
                             });
@@ -1137,9 +1154,11 @@ namespace OpenTabletDriver.Daemon
 
             if (keepOpenForSubLayer)
             {
+                bool isMove = itemToExecute?.Action?.Type == HudActionType.MoveWindowWorkspaceLayer ||
+                              itemToExecute?.Binding?.Path?.Contains("CompositorMoveWindowHudBinding") == true;
                 _ = Task.Run(async () =>
                 {
-                    await SwitchToWorkspaceSubLayer();
+                    await SwitchToWorkspaceSubLayer(isMoveWindow: isMove);
                 });
                 return Task.CompletedTask;
             }
@@ -1191,7 +1210,9 @@ namespace OpenTabletDriver.Daemon
 
             if (item.IsSubLayer)
             {
-                await SwitchToWorkspaceSubLayer();
+                bool isMove = item.Action?.Type == HudActionType.MoveWindowWorkspaceLayer ||
+                              item.Binding?.Path?.Contains("CompositorMoveWindowHudBinding") == true;
+                await SwitchToWorkspaceSubLayer(isMoveWindow: isMove);
                 return;
             }
 
@@ -1332,7 +1353,13 @@ namespace OpenTabletDriver.Daemon
                         await FocusCompositorWorkspace(action.Value);
                         break;
                     case HudActionType.WorkspaceLayer when string.IsNullOrWhiteSpace(action.Value):
-                        await SwitchToWorkspaceSubLayer();
+                        await SwitchToWorkspaceSubLayer(isMoveWindow: false);
+                        break;
+                    case HudActionType.MoveWindowWorkspaceLayer when !string.IsNullOrWhiteSpace(action.Value):
+                        await MoveWindowToCompositorWorkspace(action.Value, followFocus: true);
+                        break;
+                    case HudActionType.MoveWindowWorkspaceLayer when string.IsNullOrWhiteSpace(action.Value):
+                        await SwitchToWorkspaceSubLayer(isMoveWindow: true);
                         break;
                 }
             }

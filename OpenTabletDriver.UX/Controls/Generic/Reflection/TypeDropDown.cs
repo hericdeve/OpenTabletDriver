@@ -9,13 +9,16 @@ namespace OpenTabletDriver.UX.Controls.Generic.Reflection
 {
     public class TypeDropDown<T> : DropDown<TypeInfo> where T : class
     {
-        public TypeDropDown()
+        public TypeDropDown(Func<TypeInfo, bool>? filter = null)
         {
+            _filter = filter;
             this.ItemTextBinding = Binding.Property<TypeInfo, string>(t => t.GetFriendlyName());
             this.ItemKeyBinding = Binding.Property<TypeInfo, string>(t => t.FullName!);
 
             AppInfo.PluginManager.AssembliesChanged += HandleAssembliesChanged;
         }
+
+        private readonly Func<TypeInfo, bool>? _filter;
 
         public T? ConstructSelectedType()
         {
@@ -39,6 +42,7 @@ namespace OpenTabletDriver.UX.Controls.Generic.Reflection
         {
             var query = from type in AppInfo.PluginManager.GetChildTypes<T>()
                         where type.FullName != "OpenTabletDriver.Desktop.Binding.MultiActionBinding"
+                        where _filter == null || _filter(type)
                         orderby type.GetFriendlyName()
                         select type;
             return query.ToList();

@@ -1,6 +1,8 @@
 using System;
+using System.Linq;
 using Eto.Forms;
 using OpenTabletDriver.Desktop.Reflection;
+using OpenTabletDriver.Plugin.Attributes;
 using OpenTabletDriver.UX.Controls;
 using OpenTabletDriver.UX.Controls.Generic;
 using OpenTabletDriver.UX.Controls.Generic.Reflection;
@@ -10,7 +12,7 @@ namespace OpenTabletDriver.UX.Windows.Bindings
 {
     public class AdvancedBindingEditorDialog : Dialog<PluginSettingStore?>
     {
-        public AdvancedBindingEditorDialog(PluginSettingStore? currentBinding = null)
+        public AdvancedBindingEditorDialog(PluginSettingStore? currentBinding = null, bool allowHudOnly = false)
         {
             Title = "Advanced Binding Editor";
             Result = currentBinding;
@@ -34,7 +36,14 @@ namespace OpenTabletDriver.UX.Windows.Bindings
                                 new Group
                                 {
                                     Text = "Type",
-                                    Content = bindingTypeDropDown = new TypeDropDown<IBinding>()
+                                    Content = bindingTypeDropDown = new TypeDropDown<IBinding>(t =>
+                                    {
+                                        if (allowHudOnly)
+                                            return true;
+
+                                        // Hide HudOnlyBinding from non-HUD dialogs
+                                        return !t.GetCustomAttributes(typeof(HudOnlyBindingAttribute), false).Any();
+                                    })
                                 },
                                 settingStoreEditor
                             }

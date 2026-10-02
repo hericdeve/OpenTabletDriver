@@ -61,7 +61,7 @@ namespace OpenTabletDriver.Desktop.Contracts
         Task TriggerHudDismiss();
         Task ConfirmHudSelection(Vector2? finalPosition = null);
         Task<IReadOnlyList<Compositor.WorkspaceInfo>> GetCompositorWorkspaces();
-        Task SwitchToWorkspaceSubLayer();
+        Task SwitchToWorkspaceSubLayer(bool isMoveWindow = false);
         Task RestoreRootHudLayer();
         Task<bool> FocusCompositorWorkspace(string workspaceId);
         Task<bool> MoveWindowToCompositorWorkspace(string workspaceId, bool followFocus = true);

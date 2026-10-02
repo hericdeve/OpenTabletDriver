@@ -269,7 +269,13 @@ namespace OpenTabletDriver.Desktop.Reflection
                 return $"Workspace {target}";
             }
 
-            // 9. Generic formatted fallback
+            // 9. Compositor HUD Sub-layers
+            if (Path == "OpenTabletDriver.Desktop.Binding.CompositorWorkspaceHudBinding")
+                return "Workspace Switcher (HUD Layer)";
+            if (Path == "OpenTabletDriver.Desktop.Binding.CompositorMoveWindowHudBinding")
+                return "Move Window to Workspace (HUD Layer)";
+
+            // 10. Generic formatted fallback
             var validSettings = Settings.Where(s => s.HasValue && s.Value != null).ToList();
             if (validSettings.Count == 0)
                 return name;
@@ -369,6 +375,12 @@ namespace OpenTabletDriver.Desktop.Reflection
                 var target = store.Settings.FirstOrDefault(s => s.Property == "Target")?.Value?.ToString() ?? "1";
                 return action == "Move Window to Workspace" ? $"Move -> WS {target}" : $"WS {target}";
             }
+
+            // If Compositor HUD layers
+            if (store.Path?.EndsWith("CompositorWorkspaceHudBinding") == true)
+                return "Switch Workspace";
+            if (store.Path?.EndsWith("CompositorMoveWindowHudBinding") == true)
+                return "Move Window to WS";
 
             // Otherwise, friendly name or class name
             return store.Name ?? store.Path?.Split('.').Last() ?? "Action";
