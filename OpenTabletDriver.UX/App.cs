@@ -229,6 +229,17 @@ namespace OpenTabletDriver.UX
             get => this.appProfilerSettings;
         }
 
+        private string? currentPresetName;
+        public string? CurrentPresetName
+        {
+            set => this.RaiseAndSetIfChanged(ref this.currentPresetName, value);
+            get => this.currentPresetName;
+        }
+
+        public static event Action<string>? RequestSelectTab;
+
+        public static void SelectTab(string tabName) => RequestSelectTab?.Invoke(tabName);
+
         private const string APPNAME = "OpenTabletDriver.UX";
         public readonly static bool EnableTrayIcon = (PluginPlatform.Windows | PluginPlatform.MacOS | PluginPlatform.Linux).HasFlag(SystemInterop.CurrentPlatform);
         public readonly static bool EnableDaemonWatchdog = (PluginPlatform.Windows | PluginPlatform.MacOS).HasFlag(SystemInterop.CurrentPlatform);

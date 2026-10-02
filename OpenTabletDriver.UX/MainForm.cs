@@ -291,16 +291,25 @@ namespace OpenTabletDriver.UX
             var applySettings = new Command { MenuText = "Apply settings", Shortcut = Application.Instance.CommonModifier | Keys.Enter };
             applySettings.Executed += async (sender, e) => await ApplySettings();
 
+            var resavePreset = new Command { MenuText = "Resave current preset", Shortcut = Application.Instance.CommonModifier | Keys.Shift | Keys.P };
+            resavePreset.Executed += async (sender, e) => await ResaveCurrentPreset();
+
             var refreshPresets = new Command { MenuText = "Refresh presets" };
             refreshPresets.Executed += async (sender, e) => await RefreshPresets();
 
             var savePreset = new Command { MenuText = "Save as preset..." };
             savePreset.Executed += async (sender, e) => await SavePresetDialog();
 
-            var saveAppPreset = new Command { MenuText = "Save as app preset..." };
+            var openPresetsDirectory = new Command { MenuText = "Open presets directory..." };
+            openPresetsDirectory.Executed += async (sender, e) => DesktopInterop.OpenFolder(AppInfo.Current.PresetDirectory);
+
+            var openAppProfilesTab = new Command { MenuText = "App Profiling Configuration..." };
+            openAppProfilesTab.Executed += (sender, e) => App.SelectTab("App Profiles");
+
+            var saveAppPreset = new Command { MenuText = "Map current preset to app..." };
             saveAppPreset.Executed += async (sender, e) => await SaveAppPresetDialog();
 
-            var saveAppMode = new Command { MenuText = "Map to app mode..." };
+            var saveAppMode = new Command { MenuText = "Map output mode to app..." };
             saveAppMode.Executed += async (sender, e) => await SaveAppModeDialog();
 
             var setDefaultAppPreset = new Command { MenuText = "Set default app preset..." };
@@ -318,6 +327,13 @@ namespace OpenTabletDriver.UX
                     toggleAppPresets.Checked = App.Current.AppProfilerSettings.EnableAppProfiler;
                     toggleSyncFocus.Checked = App.Current.AppProfilerSettings.SyncFocus;
                     toggleSyncFocus.Enabled = toggleAppPresets.Checked;
+                }
+                if (e.PropertyName == nameof(App.CurrentPresetName))
+                {
+                    resavePreset.MenuText = !string.IsNullOrEmpty(App.Current.CurrentPresetName)
+                        ? $"Resave current preset (\"{App.Current.CurrentPresetName}\")"
+                        : "Resave current preset";
+                    _ = RefreshPresets();
                 }
             };
             toggleAppPresets.Executed += async (sender, e) =>
@@ -343,8 +359,6 @@ namespace OpenTabletDriver.UX
                 toggleSyncFocus.Checked = App.Current.AppProfilerSettings.SyncFocus;
                 toggleSyncFocus.Enabled = toggleAppPresets.Checked;
             }
-            var openPresetsDirectory = new Command { MenuText = "Open presets directory..." };
-            openPresetsDirectory.Executed += async (sender, e) => DesktopInterop.OpenFolder(AppInfo.Current.PresetDirectory);
 
             var detectTablet = new Command { MenuText = "Detect tablet", Shortcut = Application.Instance.CommonModifier | Keys.D };
             detectTablet.Executed += async (sender, e) =>
@@ -392,28 +406,41 @@ namespace OpenTabletDriver.UX
                             saveSettingsAs,
                             resetSettings,
                             applySettings,
-                            new SeparatorMenuItem(),
+                        }
+                    },
+                    // Presets submenu
+                    new ButtonMenuItem
+                    {
+                        Text = "&Presets",
+                        Items =
+                        {
+                            resavePreset,
                             savePreset,
+                            refreshPresets,
+                            openPresetsDirectory,
+                            new SeparatorMenuItem(),
+                            new ButtonMenuItem
+                            {
+                                Text = "No presets loaded",
+                                Enabled = false
+                            }
+                        }
+                    },
+                    // App Profiling submenu
+                    new ButtonMenuItem
+                    {
+                        Text = "P&rofiles",
+                        Items =
+                        {
+                            openAppProfilesTab,
+                            new SeparatorMenuItem(),
+                            toggleAppPresets,
+                            toggleSyncFocus,
+                            new SeparatorMenuItem(),
                             saveAppPreset,
                             saveAppMode,
                             setDefaultAppPreset,
                             setDefaultAppMode,
-                            toggleAppPresets,
-                            toggleSyncFocus,
-                            refreshPresets,
-                            openPresetsDirectory,
-                            new ButtonMenuItem
-                            {
-                                Text = "Presets",
-                                Items =
-                                {
-                                    new ButtonMenuItem
-                                    {
-                                        Text = "No presets loaded",
-                                        Enabled = false
-                                    }
-                                }
-                            }
                         }
                     },
                     // Tablets submenu
@@ -786,36 +813,78 @@ namespace OpenTabletDriver.UX
             if (trayIcon != null) // Check non-Linux
                 trayIcon.RefreshMenuItems();
 
-            // Update File submenu
+            // Update Presets top-level menu
             var presets = AppInfo.PresetManager.GetPresets();
-            var presetsMenu = fullMenu.Items.GetSubmenu("&File").Items.GetSubmenu("Presets") as ButtonMenuItem;
-            presetsMenu.Items.Clear();
-
-            if (presets.Count != 0)
+            var presetsMenu = fullMenu.Items.GetSubmenu("&Presets") as ButtonMenuItem;
+            if (presetsMenu != null)
             {
-                foreach (var preset in presets)
+                // Find separator to preserve top actions (Resave, Save As, Refresh, Open Dir)
+                int sepIndex = -1;
+                for (int i = 0; i < presetsMenu.Items.Count; i++)
                 {
-                    var presetItem = new ButtonMenuItem
+                    if (presetsMenu.Items[i] is SeparatorMenuItem)
                     {
-                        Text = preset.Name
-                    };
-                    presetItem.Click += PresetButtonHandler;
-
-                    presetsMenu.Items.Add(presetItem);
+                        sepIndex = i;
+                        break;
+                    }
                 }
-            }
-            else
-            {
-                var emptyPresetsItem = new ButtonMenuItem
-                {
-                    Text = "No presets loaded",
-                    Enabled = false
-                };
 
-                presetsMenu.Items.Add(emptyPresetsItem);
+                if (sepIndex >= 0)
+                {
+                    while (presetsMenu.Items.Count > sepIndex + 1)
+                    {
+                        presetsMenu.Items.RemoveAt(presetsMenu.Items.Count - 1);
+                    }
+                }
+
+                if (presets.Count != 0)
+                {
+                    foreach (var preset in presets)
+                    {
+                        bool isCurrent = string.Equals(preset.Name, App.Current.CurrentPresetName, StringComparison.OrdinalIgnoreCase);
+                        var presetItem = new ButtonMenuItem
+                        {
+                            Text = isCurrent ? $"✓ {preset.Name}" : preset.Name,
+                            Tag = preset.Name
+                        };
+                        presetItem.Click += PresetButtonHandler;
+
+                        presetsMenu.Items.Add(presetItem);
+                    }
+                }
+                else
+                {
+                    var emptyPresetsItem = new ButtonMenuItem
+                    {
+                        Text = "No presets loaded",
+                        Enabled = false
+                    };
+
+                    presetsMenu.Items.Add(emptyPresetsItem);
+                }
             }
 
             return Task.CompletedTask;
+        }
+
+        private async Task ResaveCurrentPreset()
+        {
+            if (string.IsNullOrEmpty(App.Current.CurrentPresetName))
+            {
+                await SavePresetDialog();
+                return;
+            }
+
+            var presetName = App.Current.CurrentPresetName;
+            var presetFile = new FileInfo(Path.Combine(AppInfo.Current.PresetDirectory, $"{presetName}.json"));
+
+            if (App.Current.Settings is Settings settings)
+            {
+                settings.Serialize(presetFile);
+                await RefreshPresets();
+                Log.Write("Settings", $"Resaved preset '{presetName}' to '{presetFile.FullName}'");
+                MessageBox.Show($"Preset '{presetName}' has been successfully updated with the current configuration.", MessageBoxType.Information);
+            }
         }
 
         private async Task SavePresetDialog()
@@ -825,16 +894,20 @@ namespace OpenTabletDriver.UX
                 "Save OpenTabletDriver settings as preset...",
                 AppInfo.Current.PresetDirectory,
                 [new FileFilter("OpenTabletDriver Settings (*.json)", ".json")],
-                "mypreset.json"
+                !string.IsNullOrEmpty(App.Current.CurrentPresetName) ? $"{App.Current.CurrentPresetName}.json" : "mypreset.json"
             );
 
             switch (fileDialog.ShowDialog(this))
             {
                 case DialogResult.Ok:
                 case DialogResult.Yes:
+                    var fileName = Path.GetFileNameWithoutExtension(fileDialog.FileName);
                     var file = new FileInfo(fileDialog.FileName + (fileDialog.FileName.EndsWith(".json") ? "" : ".json"));
                     if (App.Current.Settings is Settings settings)
+                    {
                         settings.Serialize(file);
+                        App.Current.CurrentPresetName = fileName;
+                    }
                     await RefreshPresets();
                     break;
             }
@@ -1024,13 +1097,18 @@ namespace OpenTabletDriver.UX
 
         public static async void PresetButtonHandler(object sender, EventArgs e)
         {
-            var presetName = (sender as ButtonMenuItem).Text;
+            var item = sender as ButtonMenuItem;
+            var presetName = item?.Tag as string ?? item?.Text?.TrimStart('✓', ' ');
+            if (string.IsNullOrEmpty(presetName))
+                return;
+
             var preset = AppInfo.PresetManager.FindPreset(presetName);
 
             if (preset != null && App.Current.Settings is Settings currentSettings)
             {
                 var settingsToApply = preset.Settings.Clone();
 
+                App.Current.CurrentPresetName = preset.Name;
                 App.Current.Settings = settingsToApply;
                 await App.Driver.Instance.SetSettings(settingsToApply);
                 settingsToApply.Serialize(new FileInfo(AppInfo.Current.SettingsFile));

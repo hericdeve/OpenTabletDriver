@@ -15,6 +15,7 @@ namespace OpenTabletDriver.UX.Gtk.Hud
         private HudConfiguration _config;
         private Vector2 _anchorPos;
         private Vector2 _currentPos;
+        private Vector2 _monitorOrigin = Vector2.Zero;
         private int _hoveredSlice = -1;
         private bool _isLayerShellActive;
 
@@ -67,12 +68,24 @@ namespace OpenTabletDriver.UX.Gtk.Hud
             }
             _config.Items = unique;
 
-            _anchorPos = position;
-            _currentPos = position;
-            _hoveredSlice = -1;
-
             if (_isLayerShellActive)
             {
+                var gdkDisplay = Display ?? Gdk.Display.Default;
+                var monitor = gdkDisplay?.GetMonitorAtPoint((int)position.X, (int)position.Y);
+                if (monitor != null)
+                {
+                    GtkLayerShell.SetMonitor(Handle, monitor.Handle);
+                    var geom = monitor.Geometry;
+                    _monitorOrigin = new Vector2(geom.X, geom.Y);
+                }
+                else
+                {
+                    _monitorOrigin = Vector2.Zero;
+                }
+
+                _anchorPos = position - _monitorOrigin;
+                _currentPos = _anchorPos;
+
                 // Anchor to all 4 edges to span the full screen, with exclusive zone -1 to overlay panels/bars without displacement
                 GtkLayerShell.SetAnchor(Handle, GtkLayerShell.Edge.Left, true);
                 GtkLayerShell.SetAnchor(Handle, GtkLayerShell.Edge.Right, true);
@@ -86,6 +99,10 @@ namespace OpenTabletDriver.UX.Gtk.Hud
             }
             else
             {
+                _monitorOrigin = Vector2.Zero;
+                _anchorPos = position;
+                _currentPos = position;
+
                 int diameter = (int)(_config.Radius * 2 + 40);
                 SetDefaultSize(diameter, diameter);
                 Resize(diameter, diameter);
@@ -94,14 +111,16 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                 Move(x, y);
             }
 
-            Log.Write("HUD_GTK", $"Showing RadialMenu at {position.X},{position.Y}");
+            _hoveredSlice = -1;
+
+            Log.Write("HUD_GTK", $"Showing RadialMenu at {position.X},{position.Y} (monitor origin: {_monitorOrigin.X},{_monitorOrigin.Y}, local: {_anchorPos.X},{_anchorPos.Y})");
             ShowAll();
             QueueDraw();
         }
 
         public void UpdatePosition(Vector2 position, int hoveredSlice = -1)
         {
-            _currentPos = position;
+            _currentPos = position - _monitorOrigin;
             if (_hoveredSlice != hoveredSlice)
             {
                 _hoveredSlice = hoveredSlice;

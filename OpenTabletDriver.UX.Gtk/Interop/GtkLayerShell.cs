@@ -77,5 +77,8 @@ namespace OpenTabletDriver.UX.Gtk.Interop
 
         [DllImport(LIBRARY, EntryPoint = "gtk_layer_set_monitor")]
         public static extern void SetMonitor(IntPtr window, IntPtr monitor);
+
+        [DllImport(LIBRARY, EntryPoint = "gtk_layer_get_monitor")]
+        public static extern IntPtr GetMonitor(IntPtr window);
     }
 }

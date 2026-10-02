@@ -28,6 +28,7 @@ namespace OpenTabletDriver.Desktop.Binding
         private IBinding? _holdLiftBinding;
         private DeepPressBindingState? _deepPressState;
         private bool _deepPressSuppressTip;
+        private bool _prevDeepPressSuppressTip;
         private bool _suppressTapUntilLift;
         private IDeviceReport? _latestReport;
         private bool _wasTipDown;
@@ -66,6 +67,11 @@ namespace OpenTabletDriver.Desktop.Binding
         private readonly DateTime _createdAt = DateTime.Now;
         private readonly bool _isGhostInstance;
         private bool _firstPressSeen;
+
+        public static void ResetGlobalStateForTests()
+        {
+            _lastHoldActionFiredGlobal = DateTime.MinValue;
+        }
 
         public MultiActionBinding()
         {
@@ -131,6 +137,14 @@ namespace OpenTabletDriver.Desktop.Binding
                 _holdBinding = _tapBinding;
             }
 
+            // Stylus tip with deep press: when DeepClickAction is present without a distinct hold binding,
+            // the primary tip action (TapAction) should act as an immediate held action (dragging / drawing)
+            // so touching down holds the tip binding (Mouse 1) until deep press or release!
+            if (_holdBinding == null && DeepClickAction != null && _tapBinding != null)
+            {
+                _holdBinding = _tapBinding;
+            }
+
             if (DeepClickAction != null)
             {
                 _deepPressState = new DeepPressBindingState
@@ -148,7 +162,6 @@ namespace OpenTabletDriver.Desktop.Binding
                                 (!IsDeepPressHandledExternally && _deepPressState != null && _deepPressState.IsDeepPressed);
         public bool SuppressMotion => (_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { SuppressMotion: true };
         public bool SuppressTip => ((_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { SuppressTip: true }) ||
-                                   (!IsDeepPressHandledExternally && _deepPressState != null && _deepPressState.IsDeepPressed && DeepClickSuppressStroke) ||
                                    (!IsDeepPressHandledExternally && _deepPressSuppressTip);
 
         public void Update(TabletReference tablet, IDeviceReport report)
@@ -169,6 +182,25 @@ namespace OpenTabletDriver.Desktop.Binding
                 {
                     _suppressTapUntilLift = true;
                 }
+
+                // If tip suppression transitioned (e.g. tool switch pulse during deep click):
+                // Release the active hold binding when suppression starts to cancel the stroke,
+                // and re-engage hold binding when suppression ends so continuous drawing/erasing begins immediately!
+                if (_deepPressSuppressTip && !_prevDeepPressSuppressTip)
+                {
+                    if (_holdKeysDown && _holdBinding is IStateBinding stateHold)
+                    {
+                        stateHold.Release(tablet!, report);
+                    }
+                }
+                else if (!_deepPressSuppressTip && _prevDeepPressSuppressTip)
+                {
+                    if (_holdKeysDown && _holdBinding is IStateBinding stateHold)
+                    {
+                        stateHold.Press(tablet!, report);
+                    }
+                }
+                _prevDeepPressSuppressTip = _deepPressSuppressTip;
             }
 
             if ((_holdKeysDown || _holdActivated) && _holdBinding is IContinuousBinding continuous)
@@ -425,13 +457,18 @@ namespace OpenTabletDriver.Desktop.Binding
             _lastReleaseTime = DateTime.Now;
             postAction?.Invoke();
 
-            if (!IsDeepPressHandledExternally && _deepPressState != null)
+            bool isPhysicalLiftoff = (report is ITabletReport tr && tr.Pressure == 0) ||
+                                     (_latestReport is ITabletReport trLatest && trLatest.Pressure == 0) ||
+                                     report is OutOfRangeReport;
+
+            if (!IsDeepPressHandledExternally && _deepPressState != null && isPhysicalLiftoff)
             {
                 _deepPressState.Reset(tablet, _latestReport ?? report);
                 _deepPressSuppressTip = false;
+                _prevDeepPressSuppressTip = false;
             }
 
-            if ((report is ITabletReport tr && tr.Pressure == 0) || report is OutOfRangeReport)
+            if (isPhysicalLiftoff)
             {
                 _suppressTapUntilLift = false;
             }

@@ -51,18 +51,31 @@ namespace OpenTabletDriver.UX.Gtk.Hud
             _config = config;
             RebuildButtons();
 
-            int x = (int)position.X;
-            int y = (int)position.Y - 50;
-
             if (_isLayerShellActive)
             {
+                var gdkDisplay = Display ?? Gdk.Display.Default;
+                var monitor = gdkDisplay?.GetMonitorAtPoint((int)position.X, (int)position.Y);
+                Vector2 monitorOrigin = Vector2.Zero;
+                if (monitor != null)
+                {
+                    GtkLayerShell.SetMonitor(Handle, monitor.Handle);
+                    var geom = monitor.Geometry;
+                    monitorOrigin = new Vector2(geom.X, geom.Y);
+                }
+
+                int localX = (int)(position.X - monitorOrigin.X);
+                int localY = (int)(position.Y - 50 - monitorOrigin.Y);
+
                 GtkLayerShell.SetAnchor(Handle, GtkLayerShell.Edge.Left, true);
                 GtkLayerShell.SetAnchor(Handle, GtkLayerShell.Edge.Top, true);
-                GtkLayerShell.SetMargin(Handle, GtkLayerShell.Edge.Left, Math.Max(0, x));
-                GtkLayerShell.SetMargin(Handle, GtkLayerShell.Edge.Top, Math.Max(0, y));
+                GtkLayerShell.SetMargin(Handle, GtkLayerShell.Edge.Left, Math.Max(0, localX));
+                GtkLayerShell.SetMargin(Handle, GtkLayerShell.Edge.Top, Math.Max(0, localY));
+                GtkLayerShell.SetExclusiveZone(Handle, -1);
             }
             else
             {
+                int x = (int)position.X;
+                int y = (int)position.Y - 50;
                 Move(x, y);
             }
 

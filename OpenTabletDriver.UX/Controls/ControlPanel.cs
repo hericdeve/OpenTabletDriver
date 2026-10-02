@@ -37,6 +37,12 @@ namespace OpenTabletDriver.UX.Controls
 
             control.Pages.Add(new TabPage
             {
+                Text = "App Profiles",
+                Content = appProfileEditor = new()
+            });
+
+            control.Pages.Add(new TabPage
+            {
                 Text = "Filters",
                 Padding = 5,
                 Content = filterEditor = new()
@@ -103,6 +109,18 @@ namespace OpenTabletDriver.UX.Controls
                     tabControl.SelectedPage = logView.Parent as TabPage;
                 }
             });
+
+            App.RequestSelectTab += tabName => Application.Instance.AsyncInvoke(() =>
+            {
+                foreach (var page in tabControl.Pages)
+                {
+                    if (string.Equals(page.Text, tabName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        tabControl.SelectedPage = page;
+                        break;
+                    }
+                }
+            });
         }
 
         private TabControl tabControl;
@@ -111,6 +129,7 @@ namespace OpenTabletDriver.UX.Controls
         private OutputModeEditor outputModeEditor;
         private HudEditor hudEditor;
         private ContextualToolEditor contextualToolEditor;
+        private AppProfileEditor appProfileEditor;
         private BindingEditor penBindingEditor, auxBindingEditor, mouseBindingEditor;
         private List<BindingEditor> wheelBindingEditors = [];
         private PluginSettingStoreCollectionEditor<IPositionedPipelineElement<IDeviceReport>> filterEditor;
@@ -150,6 +169,7 @@ namespace OpenTabletDriver.UX.Controls
                 SetPageVisibility(outputModeEditor, true);
                 SetPageVisibility(hudEditor, true);
                 SetPageVisibility(contextualToolEditor, true);
+                SetPageVisibility(appProfileEditor, true);
                 SetPageVisibility(filterEditor, true);
                 SetPageVisibility(penBindingEditor, true);
                 SetPageVisibility(auxBindingEditor, tablet.Properties.Specifications.AuxiliaryButtons != null);
@@ -169,6 +189,7 @@ namespace OpenTabletDriver.UX.Controls
                 SetPageVisibility(outputModeEditor, false);
                 SetPageVisibility(hudEditor, false);
                 SetPageVisibility(contextualToolEditor, false);
+                SetPageVisibility(appProfileEditor, false);
                 SetPageVisibility(filterEditor, false);
                 SetPageVisibility(penBindingEditor, false);
                 SetPageVisibility(auxBindingEditor, false);

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Numerics;
 using System.Threading;
 using OpenTabletDriver.Desktop.Binding;
@@ -382,6 +383,7 @@ namespace OpenTabletDriver.Tests
         [Fact]
         public void DeepPress_WithMultiActionBindingOnTip_ExecutesOnlyOnceWithoutDualTrigger()
         {
+            MultiActionBinding.ResetGlobalStateForTests();
             var tablet = CreateDummyTablet();
             var handler = new BindingHandler(tablet);
 
@@ -444,8 +446,9 @@ namespace OpenTabletDriver.Tests
         }
 
         [Fact]
-        public void DeepPress_WithStrokeSuppression_DoesNotLoopResetAndRetrigger()
+        public void DeepPress_WithStrokeSuppression_ReengagesTipPressureAndHoldAfterPulseDuration()
         {
+            MultiActionBinding.ResetGlobalStateForTests();
             var tablet = CreateDummyTablet();
             var handler = new BindingHandler(tablet);
 
@@ -453,37 +456,75 @@ namespace OpenTabletDriver.Tests
             var deepMock = new MockStateBinding();
             var deepLiftMock = new MockStateBinding();
 
-            var deepPress = new DeepPressBindingState
+            var multiBinding = new MultiActionBinding
+            {
+                DeepClickThreshold = 80f,
+                DeepClickHoldDelayMs = 0f,
+                DeepClickSuppressStroke = true,
+                IsDeepPressHandledExternally = false
+            };
+
+            multiBinding.TapAction = new PluginSettingStore(typeof(MockStateBinding));
+            multiBinding.HoldAction = new PluginSettingStore(typeof(MockStateBinding));
+            multiBinding.DeepClickAction = new PluginSettingStore(typeof(MockStateBinding));
+            multiBinding.DeepClickLiftAction = new PluginSettingStore(typeof(MockStateBinding));
+
+            var deepPressState = new DeepPressBindingState
             {
                 Binding = deepMock,
                 LiftBinding = deepLiftMock,
-                ActivationThreshold = 80.0f,
-                HoldDelayMs = 0.0f,
+                ActivationThreshold = 80f,
+                HoldDelayMs = 0f,
                 SuppressStroke = true
             };
 
-            handler.Tip = new ThresholdBindingState { Binding = tipMock };
-            handler.TipDeepPress = deepPress;
+            typeof(MultiActionBinding).GetField("_tapBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(multiBinding, tipMock);
+            typeof(MultiActionBinding).GetField("_holdBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(multiBinding, tipMock);
+            typeof(MultiActionBinding).GetField("_deepPressState", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(multiBinding, deepPressState);
 
-            // 1. Initial touch and deep press (85% -> 7000)
-            handler.Consume(new DummyTabletReport { Pressure = 7000 });
+            handler.Tip = new ThresholdBindingState { Binding = multiBinding };
+            handler.TipDeepPress = null;
+
+            // 1. Initial touch down lightly (30% -> 2457)
+            handler.Consume(new DummyTabletReport { Pressure = 2457 });
+            Assert.True(tipMock.IsPressed);
+            Assert.Equal(0, deepMock.PressCount);
+
+            // 2. Press deep (> 80% -> 7000)
+            var reportDeep = new DummyTabletReport { Pressure = 7000 };
+            handler.Consume(reportDeep);
             Assert.True(deepMock.IsPressed);
             Assert.Equal(1, deepMock.PressCount);
+
+            // During the 40ms pulse duration, tip is suppressed to cancel in-progress stroke
+            Assert.True(multiBinding.SuppressTip);
+
+            // 3. Fast-forward past the tool switch pulse duration (e.g. 50ms)
+            long pastTimestamp = Stopwatch.GetTimestamp() - (long)((DeepPressBindingState.ToolSwitchPulseDurationMs + 15.0) / 1000.0 * Stopwatch.Frequency);
+            typeof(DeepPressBindingState).GetField("_deepPressActivatedTimestamp", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(deepPressState, pastTimestamp);
+
+            var reportAfterPulse = new DummyTabletReport { Pressure = 7000 };
+            handler.Consume(reportAfterPulse);
+
+            // Tip suppression is lifted! Pressure is preserved so continuous drawing/erasing starts immediately
+            Assert.False(multiBinding.SuppressTip);
+            Assert.Equal(7000u, reportAfterPulse.Pressure);
+            Assert.True(tipMock.IsPressed);
+
+            // 4. Easing drawing pressure down to 40% (3276) during the stroke still keeps eraser active until liftoff
+            var reportEasing = new DummyTabletReport { Pressure = 3276 };
+            handler.Consume(reportEasing);
+            Assert.True(deepMock.IsPressed);
             Assert.Equal(0, deepLiftMock.PressCount);
 
-            // 2. Next report: stroke suppression has mutated report.Pressure or pipeline report,
-            // but physical stroke continues at high pressure (7000).
-            handler.Consume(new DummyTabletReport { Pressure = 7000 });
-            Assert.True(deepMock.IsPressed);
-            Assert.Equal(1, deepMock.PressCount); // Must still be 1, never re-triggered!
-            Assert.Equal(0, deepLiftMock.PressCount); // Lift action must not fire prematurely!
-
-            // 3. Final physical liftoff (Pressure = 0)
+            // 5. Stylus finally lifts off (Pressure = 0)
             handler.Consume(new DummyTabletReport { Pressure = 0 });
             Assert.False(deepMock.IsPressed);
-            Assert.Equal(1, deepMock.ReleaseCount);
             Assert.Equal(1, deepLiftMock.PressCount);
-            Assert.Equal(1, deepLiftMock.ReleaseCount);
         }
     }
 }

@@ -28,7 +28,7 @@ namespace OpenTabletDriver.Desktop.Binding
         /// Duration in milliseconds to momentarily pulse tip touch to 0 upon entering deep press,
         /// ending any in-progress drawing stroke and allowing the target application to switch tools.
         /// </summary>
-        public const double ToolSwitchPulseDurationMs = 30.0;
+        public const double ToolSwitchPulseDurationMs = 40.0;
 
         /// <summary>
         /// Determines whether this binding represents a mouse click (such as Right Click context menu)
@@ -91,13 +91,12 @@ namespace OpenTabletDriver.Desktop.Binding
 
                 if (IsDeepPressed)
                 {
-                    bool hasLiftAction = LiftBinding != null || (Binding is MultiActionBinding multi && multi.HoldLiftAction != null);
-                    bool isPenTipLiftOnly = hasLiftAction && string.Equals(LiftTrigger, "Pen Tip Lift", StringComparison.OrdinalIgnoreCase);
+                    bool isPenTipLiftOnly = string.Equals(LiftTrigger, "Pen Tip Lift", StringComparison.OrdinalIgnoreCase);
 
                     if (isPenTipLiftOnly)
                     {
-                        // When configured with a lift action (e.g. Eraser on deep press, Pen on lift),
-                        // keep the eraser active for the entire stroke until the stylus lifts off the screen.
+                        // When configured with Pen Tip Lift (e.g. Eraser on deep press, Pen on lift or tip lift),
+                        // keep the deep press action active for the entire stroke until the stylus lifts off the screen.
                         // This prevents fluctuating drawing pressure from prematurely cancelling the eraser.
                         base.Invoke(tablet, report, true);
                     }
@@ -160,7 +159,19 @@ namespace OpenTabletDriver.Desktop.Binding
                 else if (IsDeepPressed)
                 {
                     if (SuppressStroke)
-                        suppressTip = true;
+                    {
+                        if (ShouldHoldTipSuppressed())
+                        {
+                            suppressTip = true;
+                        }
+                        else
+                        {
+                            long elapsedSinceActivation = Stopwatch.GetTimestamp() - _deepPressActivatedTimestamp;
+                            double elapsedMs = (double)elapsedSinceActivation / Stopwatch.Frequency * 1000.0;
+                            if (elapsedMs < ToolSwitchPulseDurationMs)
+                                suppressTip = true;
+                        }
+                    }
 
                     base.Invoke(tablet, report, true);
                 }

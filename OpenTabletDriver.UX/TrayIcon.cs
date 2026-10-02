@@ -170,6 +170,14 @@ namespace OpenTabletDriver.UX
                     items.Add(new SeparatorMenuItem());
                 }
 
+                var presetsMenu = window.Menu.Items.GetSubmenu("&Presets");
+                if (presetsMenu != null)
+                    items.Add(CloneMenuItem(presetsMenu));
+
+                var profilesMenu = window.Menu.Items.GetSubmenu("P&rofiles");
+                if (profilesMenu != null)
+                    items.Add(CloneMenuItem(profilesMenu));
+
                 var tabletsMenu = window.Menu.Items.GetSubmenu("Tablets");
                 if (tabletsMenu != null)
                     items.Add(CloneMenuItem(tabletsMenu));
