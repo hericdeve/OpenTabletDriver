@@ -1007,6 +1007,7 @@ namespace OpenTabletDriver.Daemon
                             wsConfig.Items.Add(new HudItem
                             {
                                 Label = label,
+                                AppClasses = ws?.AppClasses != null ? new List<string>(ws.AppClasses) : new List<string>(),
                                 Action = new HudAction
                                 {
                                     Type = HudActionType.MoveWindowWorkspaceLayer,
@@ -1041,6 +1042,7 @@ namespace OpenTabletDriver.Daemon
                             wsConfig.Items.Add(new HudItem
                             {
                                 Label = label,
+                                AppClasses = ws.AppClasses != null ? new List<string>(ws.AppClasses) : new List<string>(),
                                 Action = new HudAction
                                 {
                                     Type = HudActionType.WorkspaceLayer,

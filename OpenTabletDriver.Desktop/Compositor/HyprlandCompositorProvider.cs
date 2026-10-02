@@ -47,6 +47,59 @@ namespace OpenTabletDriver.Desktop.Compositor
             try
             {
                 var activeWs = GetActiveWorkspaceInternal();
+                var clientsByWorkspace = new Dictionary<string, List<string>>();
+
+                try
+                {
+                    var clientsJson = _ipcService.SendCommand("j/clients");
+                    if (!string.IsNullOrWhiteSpace(clientsJson))
+                    {
+                        using var clientDoc = JsonDocument.Parse(clientsJson);
+                        if (clientDoc.RootElement.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var client in clientDoc.RootElement.EnumerateArray())
+                            {
+                                if (client.TryGetProperty("mapped", out var mappedProp) && !mappedProp.GetBoolean())
+                                    continue;
+
+                                string wsId = "";
+                                if (client.TryGetProperty("workspace", out var wsProp))
+                                {
+                                    if (wsProp.ValueKind == JsonValueKind.Object && wsProp.TryGetProperty("id", out var wId))
+                                        wsId = wId.GetInt32().ToString();
+                                    else if (wsProp.ValueKind == JsonValueKind.Number)
+                                        wsId = wsProp.GetInt32().ToString();
+                                    else if (wsProp.ValueKind == JsonValueKind.String)
+                                        wsId = wsProp.GetString() ?? "";
+                                }
+
+                                if (string.IsNullOrEmpty(wsId))
+                                    continue;
+
+                                string appClass = "";
+                                if (client.TryGetProperty("class", out var classProp) && !string.IsNullOrWhiteSpace(classProp.GetString()))
+                                    appClass = classProp.GetString()!;
+                                else if (client.TryGetProperty("initialClass", out var initClassProp) && !string.IsNullOrWhiteSpace(initClassProp.GetString()))
+                                    appClass = initClassProp.GetString()!;
+
+                                if (!string.IsNullOrWhiteSpace(appClass))
+                                {
+                                    if (!clientsByWorkspace.TryGetValue(wsId, out var classList))
+                                    {
+                                        classList = new List<string>();
+                                        clientsByWorkspace[wsId] = classList;
+                                    }
+                                    classList.Add(appClass);
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("HyprlandCompositorProvider", $"Failed to fetch clients: {ex.Message}", LogLevel.Debug);
+                }
+
                 var json = _ipcService.SendCommand("j/workspaces");
                 if (!string.IsNullOrWhiteSpace(json))
                 {
@@ -63,6 +116,10 @@ namespace OpenTabletDriver.Desktop.Compositor
 
                             bool isActive = activeWs != null && (activeWs.Id == id || activeWs.Name == name);
 
+                            var apps = clientsByWorkspace.TryGetValue(id, out var foundApps) || clientsByWorkspace.TryGetValue(name, out foundApps)
+                                ? foundApps
+                                : new List<string>();
+
                             list.Add(new WorkspaceInfo
                             {
                                 Id = id,
@@ -70,7 +127,8 @@ namespace OpenTabletDriver.Desktop.Compositor
                                 Monitor = mon,
                                 WindowsCount = wins,
                                 IsActive = isActive,
-                                LastWindowTitle = lastTitle
+                                LastWindowTitle = lastTitle,
+                                AppClasses = apps
                             });
                         }
                     }
@@ -80,6 +138,8 @@ namespace OpenTabletDriver.Desktop.Compositor
                 if (activeWs != null && !list.Any(w => w.Id == activeWs.Id))
                 {
                     activeWs.IsActive = true;
+                    if (clientsByWorkspace.TryGetValue(activeWs.Id, out var activeApps) || clientsByWorkspace.TryGetValue(activeWs.Name, out activeApps))
+                        activeWs.AppClasses = activeApps;
                     list.Add(activeWs);
                 }
 

@@ -11,6 +11,9 @@ namespace OpenTabletDriver.Desktop.Hud
         public string? Icon { get; set; }
         public string? Color { get; set; }
 
+        [JsonProperty("AppClasses")]
+        public System.Collections.Generic.List<string>? AppClasses { get; set; }
+
         [JsonProperty("Action")]
         public HudAction Action { get; set; } = new();
 

@@ -10,6 +10,7 @@ namespace OpenTabletDriver.Desktop.Compositor
         public int WindowsCount { get; set; }
         public bool IsActive { get; set; }
         public string? LastWindowTitle { get; set; }
+        public System.Collections.Generic.List<string> AppClasses { get; set; } = new();
 
         public override string ToString() => string.IsNullOrWhiteSpace(LastWindowTitle) ? Name : $"{Name} ({LastWindowTitle})";
     }

@@ -135,7 +135,7 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                 _anchorPos = position;
                 _currentPos = position;
 
-                int diameter = (int)(_config.Radius * 2 + 50);
+                int diameter = (int)(_config.Radius * 2 + 120);
                 SetDefaultSize(diameter, diameter);
                 Resize(diameter, diameter);
                 int x = (int)(position.X - diameter / 2f);
@@ -274,6 +274,109 @@ namespace OpenTabletDriver.UX.Gtk.Hud
             cr.Arc(x + w - r, y + h - r, r, 0, 0.5 * Math.PI);
             cr.Arc(x + r, y + h - r, r, 0.5 * Math.PI, Math.PI);
             cr.ClosePath();
+        }
+
+        private static void DrawWorkspaceAppIcons(Context cr, System.Collections.Generic.List<string> apps, double centerX, double centerY, double midRad, double radiusInner, double radiusOuter, double currentAlpha)
+        {
+            if (apps == null || apps.Count == 0)
+                return;
+
+            int totalApps = apps.Count;
+            int maxDisplay = Math.Min(totalApps, 7);
+
+            // Determine concentric rows based on app count
+            // Outer rows have more arc space, inner rows have less
+            // 1 app:  [1]
+            // 2 apps: [1 inner, 1 outer]
+            // 3 apps: [1 inner, 2 outer]
+            // 4 apps: [1 inner, 1 mid, 2 outer]
+            // 5 apps: [1 inner, 2 mid, 2 outer]
+            // 6 apps: [1 inner, 2 mid, 3 outer]
+            // 7 apps: [1 inner, 3 mid, 3 outer]
+            int[] rowCounts = maxDisplay switch
+            {
+                1 => new[] { 1 },
+                2 => new[] { 1, 1 },
+                3 => new[] { 1, 2 },
+                4 => new[] { 1, 1, 2 },
+                5 => new[] { 1, 2, 2 },
+                6 => new[] { 1, 2, 3 },
+                _ => new[] { 1, 3, 3 }
+            };
+
+            int numRows = rowCounts.Length;
+            double radialSpan = radiusOuter - radiusInner;
+            double midRadius = (radiusInner + radiusOuter) / 2.0;
+
+            // Icon size dynamically scales if multiple rows
+            int iconSize = numRows switch
+            {
+                1 => 26,
+                2 => 22,
+                _ => 18
+            };
+
+            // Dynamic radial spacing centered around midRadius
+            double rowSpacing = numRows switch
+            {
+                1 => 0.0,
+                2 => Math.Min(26.0, radialSpan * 0.35),
+                _ => Math.Min(22.0, radialSpan * 0.28)
+            };
+
+            double firstRowRadius = midRadius - ((numRows - 1) * rowSpacing / 2.0);
+
+            int appIdx = 0;
+            for (int r = 0; r < numRows; r++)
+            {
+                double rowRadius = firstRowRadius + (r * rowSpacing);
+                int countInRow = rowCounts[r];
+
+                // Angular step along the arc at rowRadius:
+                // Arc length S = r * dTheta => dTheta = (iconSize + spacing) / r
+                double itemArcWidth = iconSize + 6.0;
+                double angularStep = itemArcWidth / rowRadius;
+
+                // Center the row's icons symmetrically around midRad
+                double startAngle = midRad - ((countInRow - 1) * angularStep / 2.0);
+
+                for (int c = 0; c < countInRow && appIdx < maxDisplay; c++)
+                {
+                    double iconAngle = startAngle + (c * angularStep);
+                    double iconCenterX = centerX + Math.Cos(iconAngle) * rowRadius;
+                    double iconCenterY = centerY + Math.Sin(iconAngle) * rowRadius;
+
+                    var appClass = apps[appIdx++];
+                    var pixbuf = AppIconCache.GetIcon(appClass, iconSize);
+
+                    if (pixbuf != null)
+                    {
+                        cr.Save();
+                        // Position upright without rotating context
+                        global::Gdk.CairoHelper.SetSourcePixbuf(cr, pixbuf, iconCenterX - (pixbuf.Width / 2.0), iconCenterY - (pixbuf.Height / 2.0));
+                        cr.PaintWithAlpha(currentAlpha);
+                        cr.Restore();
+                    }
+                    else
+                    {
+                        // Sleek rounded letter badge fallback
+                        double badgeR = iconSize / 2.0;
+                        cr.Arc(iconCenterX, iconCenterY, badgeR, 0, 2 * Math.PI);
+                        cr.SetSourceRGBA(0.25, 0.28, 0.35, 0.90 * currentAlpha);
+                        cr.FillPreserve();
+                        cr.SetSourceRGBA(1.0, 1.0, 1.0, 0.30 * currentAlpha);
+                        cr.LineWidth = 1.0;
+                        cr.Stroke();
+
+                        string letter = !string.IsNullOrWhiteSpace(appClass) ? appClass.Substring(0, 1).ToUpperInvariant() : "?";
+                        cr.SetFontSize(iconSize * 0.55);
+                        var ext = cr.TextExtents(letter);
+                        cr.MoveTo(iconCenterX - (ext.Width / 2.0) - ext.XBearing, iconCenterY - (ext.Height / 2.0) - ext.YBearing);
+                        cr.SetSourceRGBA(1.0, 1.0, 1.0, 0.95 * currentAlpha);
+                        cr.ShowText(letter);
+                    }
+                }
+            }
         }
 
         private void OnDrawn(object o, DrawnArgs args)
@@ -446,55 +549,75 @@ namespace OpenTabletDriver.UX.Gtk.Hud
 
                 if (!string.IsNullOrEmpty(badgeText))
                 {
-                    // Render pill capsule badge
-                    cr.SetFontSize(11);
-                    var bExt = cr.TextExtents(badgeText);
-                    double pillW = Math.Max(24, bExt.Width + 12);
-                    double pillH = 17;
-                    double pillX = itemX - (pillW / 2.0);
-                    double pillY = string.IsNullOrEmpty(labelText) ? (itemY - pillH / 2.0) : (itemY - pillH - 2);
+                    // Render workspace number badge OUTSIDE the slot perimeter
+                    double badgeRadius = effectiveOuterRadius + 22.0 + (2.0 * bloom);
+                    double badgeCenterX = centerX + Math.Cos(midRad) * badgeRadius;
+                    double badgeCenterY = centerY + Math.Sin(midRad) * badgeRadius;
 
-                    DrawRoundedRectangle(cr, pillX, pillY, pillW, pillH, 8.5);
+                    cr.SetFontSize(11.5);
+                    var bExt = cr.TextExtents(badgeText);
+                    double pillW = Math.Max(26, bExt.Width + 14);
+                    double pillH = 19;
+                    double pillX = badgeCenterX - (pillW / 2.0);
+                    double pillY = badgeCenterY - (pillH / 2.0);
+
+                    DrawRoundedRectangle(cr, pillX, pillY, pillW, pillH, pillH / 2.0);
 
                     if (isSolid)
-                        cr.SetSourceRGBA(0.18, 0.18, 0.22, currentAlpha);
+                    {
+                        if (bloom > 0.01f)
+                            cr.SetSourceRGBA(0.04, 0.52, 1.00, currentAlpha);
+                        else
+                            cr.SetSourceRGBA(0.16, 0.16, 0.20, 0.95 * currentAlpha);
+                    }
                     else
-                        cr.SetSourceRGBA(1.0, 1.0, 1.0, 0.15 * currentAlpha);
+                    {
+                        if (bloom > 0.01f)
+                            cr.SetSourceRGBA(0.05, 0.50, 1.00, 0.90 * currentAlpha);
+                        else
+                            cr.SetSourceRGBA(0.12, 0.12, 0.16, 0.85 * currentAlpha);
+                    }
                     cr.FillPreserve();
 
-                    cr.SetSourceRGBA(1.0, 1.0, 1.0, 0.12 * currentAlpha);
-                    cr.LineWidth = 1.0;
+                    cr.SetSourceRGBA(1.0, 1.0, 1.0, (bloom > 0.01f ? 0.45 : 0.20) * currentAlpha);
+                    cr.LineWidth = 1.2;
                     cr.Stroke();
 
-                    // Text inside capsule
-                    cr.SetSourceRGBA(1.0, 1.0, 1.0, (bloom > 0.4f ? 1.0 : 0.92) * currentAlpha);
+                    // Text inside outer capsule
+                    cr.SetSourceRGBA(1.0, 1.0, 1.0, (bloom > 0.4f ? 1.0 : 0.95) * currentAlpha);
                     cr.MoveTo(pillX + (pillW - bExt.Width) / 2.0 - bExt.XBearing, pillY + (pillH - bExt.Height) / 2.0 - bExt.YBearing);
                     cr.ShowText(badgeText);
 
                     // Active workspace glowing dot indicator
                     if (isActiveWorkspace)
                     {
-                        double dotX = pillX - 6.5;
-                        double dotY = pillY + pillH / 2.0;
+                        double dotX = pillX - 7;
+                        double dotY = badgeCenterY;
 
                         // Soft halo
                         cr.Arc(dotX, dotY, 4.5, 0, 2 * Math.PI);
-                        cr.SetSourceRGBA(0.19, 0.82, 0.35, 0.35 * currentAlpha);
+                        cr.SetSourceRGBA(0.19, 0.82, 0.35, 0.40 * currentAlpha);
                         cr.Fill();
 
                         // Core glowing dot
                         cr.Arc(dotX, dotY, 2.5, 0, 2 * Math.PI);
-                        cr.SetSourceRGBA(0.19, 0.82, 0.35, 0.95 * currentAlpha);
+                        cr.SetSourceRGBA(0.19, 0.82, 0.35, 1.00 * currentAlpha);
                         cr.Fill();
                     }
 
-                    // Window title text below pill
-                    if (!string.IsNullOrEmpty(labelText))
+                    // Render unrotated upright app icons inside the trapezoidal slice slot
+                    var apps = item.AppClasses ?? new System.Collections.Generic.List<string>();
+                    if (apps.Count > 0)
                     {
+                        DrawWorkspaceAppIcons(cr, apps, centerX, centerY, midRad, radiusInner, effectiveOuterRadius, currentAlpha);
+                    }
+                    else if (!string.IsNullOrEmpty(labelText))
+                    {
+                        // Fallback title if apps not resolved
                         cr.SetFontSize(10.5);
                         var lExt = cr.TextExtents(labelText);
-                        cr.MoveTo(itemX - (lExt.Width / 2.0) - lExt.XBearing, itemY + 11 - lExt.YBearing);
-                        cr.SetSourceRGBA(1.0, 1.0, 1.0, (bloom > 0.4f ? 1.0 : 0.82) * currentAlpha);
+                        cr.MoveTo(itemX - (lExt.Width / 2.0) - lExt.XBearing, itemY - (lExt.Height / 2.0) - lExt.YBearing);
+                        cr.SetSourceRGBA(1.0, 1.0, 1.0, (bloom > 0.4f ? 1.0 : 0.85) * currentAlpha);
                         cr.ShowText(labelText);
                     }
                 }
@@ -589,7 +712,7 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                     double dx = args.Event.X - _anchorPos.X;
                     double dy = args.Event.Y - _anchorPos.Y;
                     clickDist = Math.Sqrt(dx * dx + dy * dy);
-                    if (clickDist > _config.Radius + 20)
+                    if (clickDist > _config.Radius + 50)
                     {
                         Dismiss();
                         return;
@@ -600,6 +723,11 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                     double dx = args.Event.X - Allocation.Width / 2.0;
                     double dy = args.Event.Y - Allocation.Height / 2.0;
                     clickDist = Math.Sqrt(dx * dx + dy * dy);
+                    if (clickDist > _config.Radius + 50)
+                    {
+                        Dismiss();
+                        return;
+                    }
                 }
 
                 if (_hoveredSlice >= 0 && _hoveredSlice < _config.Items.Count)
