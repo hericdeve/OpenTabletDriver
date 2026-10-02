@@ -7,7 +7,6 @@ using Eto.Drawing;
 using Eto.Forms;
 using OpenTabletDriver.Desktop;
 using OpenTabletDriver.Desktop.AppProfiler;
-using OpenTabletDriver.Desktop.Interop.Display;
 using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Output;
@@ -37,25 +36,14 @@ namespace OpenTabletDriver.UX.Controls
         private readonly DropDown _defaultPresetDropDown = new();
         private readonly DropDown _defaultModeDropDown = new();
 
-        // Rules Grid
+        // Rules Grid & Actions
         private readonly GridView<AppProfileRule> _rulesGrid = new();
+        private readonly Button _newRuleButton = new() { Text = "+ Add Rule..." };
+        private readonly Button _editRuleButton = new() { Text = "✎ Edit Rule...", Enabled = false };
+        private readonly Button _deleteRuleButton = new() { Text = "- Delete Rule", Enabled = false };
         private readonly Button _moveUpButton = new() { Text = "▲ Move Up", Enabled = false };
         private readonly Button _moveDownButton = new() { Text = "▼ Move Down", Enabled = false };
-        private readonly Button _newRuleButton = new() { Text = "+ New Rule" };
-        private readonly Button _deleteRuleButton = new() { Text = "- Delete Rule", Enabled = false };
 
-        // Detail Editor Form
-        private readonly TextBox _ruleNameTextBox = new() { PlaceholderText = "e.g. Krita Drawing" };
-        private readonly DropDown _targetTypeDropDown = new();
-        private readonly DropDown _matchTypeDropDown = new();
-        private readonly TextBox _patternTextBox = new() { PlaceholderText = "e.g. krita, steam_app_.*, or layer namespace" };
-        private readonly DropDown _presetDropDown = new();
-        private readonly DropDown _modeDropDown = new();
-        private readonly DropDown _displayMappingDropDown = new();
-        private readonly TextBox _targetMonitorTextBox = new() { PlaceholderText = "e.g. DP-1, HDMI-A-1", Enabled = false };
-
-        private readonly Button _detectButton = new() { Text = "🎯 Detect Active Target" };
-        private readonly Button _applyRuleButton = new() { Text = "Apply Rule to List" };
         private readonly Button _saveButton = new() { Text = "Save Settings" };
         private readonly Label _statusLabel = new() { Text = "" };
 
@@ -66,8 +54,6 @@ namespace OpenTabletDriver.UX.Controls
 
         public AppProfileEditor()
         {
-            Padding = new Padding(10);
-
             InitializeGrid();
             InitializeEventHandlers();
             BuildLayout();
@@ -88,7 +74,7 @@ namespace OpenTabletDriver.UX.Controls
 
         private void InitializeGrid()
         {
-            _rulesGrid.Size = new Size(-1, 220);
+            _rulesGrid.Size = new Size(-1, 300);
             _rulesGrid.ShowHeader = true;
 
             var enabledBinding = Binding.Property<AppProfileRule, bool?>(r => r.Enabled);
@@ -110,7 +96,7 @@ namespace OpenTabletDriver.UX.Controls
             {
                 HeaderText = "Rule Name",
                 DataCell = new TextBoxCell { Binding = Binding.Property<AppProfileRule, string>(r => r.Name) },
-                Width = 140
+                Width = 160
             });
 
             _rulesGrid.Columns.Add(new GridColumn
@@ -131,7 +117,7 @@ namespace OpenTabletDriver.UX.Controls
             {
                 HeaderText = "Pattern",
                 DataCell = new TextBoxCell { Binding = Binding.Property<AppProfileRule, string>(r => r.Pattern) },
-                Width = 160
+                Width = 170
             });
 
             _rulesGrid.Columns.Add(new GridColumn
@@ -159,8 +145,12 @@ namespace OpenTabletDriver.UX.Controls
             {
                 if (_isUpdating) return;
                 _selectedRule = _rulesGrid.SelectedItem as AppProfileRule;
-                UpdateEditorFieldsFromSelectedRule();
                 UpdateGridActionButtons();
+            };
+
+            _rulesGrid.CellDoubleClick += async (s, e) =>
+            {
+                await EditSelectedRuleAsync();
             };
         }
 
@@ -213,11 +203,9 @@ namespace OpenTabletDriver.UX.Controls
                 await SaveSettingsAsync();
             };
 
-            _displayMappingDropDown.SelectedValueChanged += (s, e) =>
-            {
-                var isSpecific = _displayMappingDropDown.SelectedKey == nameof(RuleDisplayMapping.SpecificMonitor);
-                _targetMonitorTextBox.Enabled = isSpecific;
-            };
+            _newRuleButton.Click += async (s, e) => await AddNewRuleAsync();
+            _editRuleButton.Click += async (s, e) => await EditSelectedRuleAsync();
+            _deleteRuleButton.Click += async (s, e) => await DeleteSelectedRuleAsync();
 
             _moveUpButton.Click += async (s, e) =>
             {
@@ -230,6 +218,7 @@ namespace OpenTabletDriver.UX.Controls
                     settings.Rules.Insert(idx - 1, _selectedRule);
                     RefreshGrid();
                     _rulesGrid.SelectedRow = idx - 1;
+                    UpdateGridActionButtons();
                     await SaveSettingsAsync();
                 }
             };
@@ -245,183 +234,82 @@ namespace OpenTabletDriver.UX.Controls
                     settings.Rules.Insert(idx + 1, _selectedRule);
                     RefreshGrid();
                     _rulesGrid.SelectedRow = idx + 1;
+                    UpdateGridActionButtons();
                     await SaveSettingsAsync();
                 }
-            };
-
-            _newRuleButton.Click += (s, e) =>
-            {
-                _rulesGrid.SelectedRow = -1;
-                _selectedRule = null;
-                _ruleNameTextBox.Text = string.Empty;
-                _targetTypeDropDown.SelectedKey = nameof(RuleTargetType.WindowClass);
-                _matchTypeDropDown.SelectedKey = nameof(RuleMatchType.Exact);
-                _patternTextBox.Text = string.Empty;
-                _presetDropDown.SelectedKey = "";
-                _modeDropDown.SelectedKey = "";
-                _displayMappingDropDown.SelectedKey = nameof(RuleDisplayMapping.Inherit);
-                _targetMonitorTextBox.Text = string.Empty;
-                _targetMonitorTextBox.Enabled = false;
-                _ruleNameTextBox.Focus();
-                UpdateGridActionButtons();
-            };
-
-            _deleteRuleButton.Click += async (s, e) =>
-            {
-                var settings = App.Current.AppProfilerSettings;
-                if (settings == null || _selectedRule == null) return;
-                settings.Rules.Remove(_selectedRule);
-                _selectedRule = null;
-                RefreshGrid();
-                UpdateGridActionButtons();
-                await SaveSettingsAsync();
-            };
-
-            _detectButton.Click += async (s, e) =>
-            {
-                _detectButton.Enabled = false;
-                _detectButton.Text = "Detecting in 2s...";
-                await Task.Delay(2000);
-                try
-                {
-                    var daemon = App.Driver?.Instance;
-                    if (daemon != null)
-                    {
-                        var context = await daemon.GetActiveAppProfileContext();
-                        if (context != null)
-                        {
-                            if (context.IsHoveringLayer && !string.IsNullOrEmpty(context.LayerNamespace))
-                            {
-                                _targetTypeDropDown.SelectedKey = nameof(RuleTargetType.LayerNamespace);
-                                _patternTextBox.Text = context.LayerNamespace;
-                                if (string.IsNullOrWhiteSpace(_ruleNameTextBox.Text))
-                                    _ruleNameTextBox.Text = $"Layer: {context.LayerNamespace}";
-                            }
-                            else if (!string.IsNullOrEmpty(context.WindowClass))
-                            {
-                                _targetTypeDropDown.SelectedKey = nameof(RuleTargetType.WindowClass);
-                                _patternTextBox.Text = context.WindowClass;
-                                if (string.IsNullOrWhiteSpace(_ruleNameTextBox.Text))
-                                    _ruleNameTextBox.Text = context.WindowClass;
-                            }
-                            else if (!string.IsNullOrEmpty(context.WindowTitle))
-                            {
-                                _targetTypeDropDown.SelectedKey = nameof(RuleTargetType.WindowTitle);
-                                _patternTextBox.Text = context.WindowTitle;
-                                if (string.IsNullOrWhiteSpace(_ruleNameTextBox.Text))
-                                    _ruleNameTextBox.Text = context.WindowTitle;
-                            }
-                            else
-                            {
-                                MessageBox.Show("No active window class, title, or layer surface was detected.", MessageBoxType.Information);
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Error detecting target: {ex.Message}", MessageBoxType.Error);
-                }
-                finally
-                {
-                    _detectButton.Enabled = true;
-                    _detectButton.Text = "🎯 Detect Active Target";
-                }
-            };
-
-            _applyRuleButton.Click += async (s, e) =>
-            {
-                var pattern = _patternTextBox.Text?.Trim();
-                if (string.IsNullOrWhiteSpace(pattern))
-                {
-                    MessageBox.Show("Please specify a pattern to match.", MessageBoxType.Warning);
-                    return;
-                }
-
-                var ruleName = _ruleNameTextBox.Text?.Trim();
-                if (string.IsNullOrWhiteSpace(ruleName))
-                    ruleName = pattern;
-
-                var settings = App.Current.AppProfilerSettings ?? new AppProfilerSettings();
-
-                Enum.TryParse<RuleTargetType>(_targetTypeDropDown.SelectedKey, out var targetType);
-                Enum.TryParse<RuleMatchType>(_matchTypeDropDown.SelectedKey, out var matchType);
-                Enum.TryParse<RuleDisplayMapping>(_displayMappingDropDown.SelectedKey, out var displayMapping);
-
-                var presetKey = string.IsNullOrEmpty(_presetDropDown.SelectedKey) ? null : _presetDropDown.SelectedKey;
-                var modeKey = string.IsNullOrEmpty(_modeDropDown.SelectedKey) ? null : _modeDropDown.SelectedKey;
-                var targetMonitor = string.IsNullOrWhiteSpace(_targetMonitorTextBox.Text) ? null : _targetMonitorTextBox.Text.Trim();
-
-                if (_selectedRule != null && settings.Rules.Contains(_selectedRule))
-                {
-                    _selectedRule.Name = ruleName;
-                    _selectedRule.TargetType = targetType;
-                    _selectedRule.MatchType = matchType;
-                    _selectedRule.Pattern = pattern;
-                    _selectedRule.PresetName = presetKey;
-                    _selectedRule.OutputMode = modeKey;
-                    _selectedRule.DisplayMapping = displayMapping;
-                    _selectedRule.TargetMonitor = targetMonitor;
-                }
-                else
-                {
-                    var newRule = new AppProfileRule
-                    {
-                        Name = ruleName,
-                        Enabled = true,
-                        TargetType = targetType,
-                        MatchType = matchType,
-                        Pattern = pattern,
-                        PresetName = presetKey,
-                        OutputMode = modeKey,
-                        DisplayMapping = displayMapping,
-                        TargetMonitor = targetMonitor
-                    };
-                    settings.Rules.Add(newRule);
-                    _selectedRule = newRule;
-                }
-
-                RefreshGrid();
-                if (_selectedRule != null)
-                {
-                    _rulesGrid.SelectedRow = settings.Rules.IndexOf(_selectedRule);
-                }
-                await SaveSettingsAsync();
             };
 
             _saveButton.Click += async (s, e) => await SaveSettingsAsync();
         }
 
-        private void UpdateEditorFieldsFromSelectedRule()
+        private async Task AddNewRuleAsync()
+        {
+            var dialog = new Windows.AppProfileRuleDialog(null, _presetNames, _outputModes);
+            var newRule = dialog.ShowModal(this);
+            if (newRule != null)
+            {
+                var settings = App.Current.AppProfilerSettings ?? new AppProfilerSettings();
+                settings.Rules.Add(newRule);
+                _selectedRule = newRule;
+                RefreshGrid();
+                _rulesGrid.SelectedRow = settings.Rules.IndexOf(newRule);
+                UpdateGridActionButtons();
+                await SaveSettingsAsync();
+            }
+        }
+
+        private async Task EditSelectedRuleAsync()
         {
             if (_selectedRule == null) return;
+            var dialog = new Windows.AppProfileRuleDialog(_selectedRule, _presetNames, _outputModes);
+            var result = dialog.ShowModal(this);
+            if (result != null)
+            {
+                RefreshGrid();
+                UpdateGridActionButtons();
+                await SaveSettingsAsync();
+            }
+        }
 
-            _ruleNameTextBox.Text = _selectedRule.Name;
-            _targetTypeDropDown.SelectedKey = _selectedRule.TargetType.ToString();
-            _matchTypeDropDown.SelectedKey = _selectedRule.MatchType.ToString();
-            _patternTextBox.Text = _selectedRule.Pattern;
-            _presetDropDown.SelectedKey = _selectedRule.PresetName ?? "";
-            _modeDropDown.SelectedKey = _selectedRule.OutputMode ?? "";
-            _displayMappingDropDown.SelectedKey = _selectedRule.DisplayMapping.ToString();
-            _targetMonitorTextBox.Text = _selectedRule.TargetMonitor ?? "";
-            _targetMonitorTextBox.Enabled = _selectedRule.DisplayMapping == RuleDisplayMapping.SpecificMonitor;
+        private async Task DeleteSelectedRuleAsync()
+        {
+            var settings = App.Current.AppProfilerSettings;
+            if (settings == null || _selectedRule == null) return;
+
+            var confirm = MessageBox.Show(
+                this,
+                $"Are you sure you want to delete rule '{_selectedRule.Name}'?",
+                "Delete Rule",
+                MessageBoxButtons.YesNo,
+                MessageBoxType.Question);
+
+            if (confirm != DialogResult.Yes) return;
+
+            settings.Rules.Remove(_selectedRule);
+            _selectedRule = null;
+            RefreshGrid();
+            UpdateGridActionButtons();
+            await SaveSettingsAsync();
         }
 
         private void UpdateGridActionButtons()
         {
             var settings = App.Current.AppProfilerSettings;
-            if (settings == null || _selectedRule == null)
+            var hasSelection = _selectedRule != null && settings != null;
+
+            _editRuleButton.Enabled = hasSelection;
+            _deleteRuleButton.Enabled = hasSelection;
+
+            if (!hasSelection || settings == null)
             {
                 _moveUpButton.Enabled = false;
                 _moveDownButton.Enabled = false;
-                _deleteRuleButton.Enabled = false;
                 return;
             }
 
-            var idx = settings.Rules.IndexOf(_selectedRule);
+            var idx = settings.Rules.IndexOf(_selectedRule!);
             _moveUpButton.Enabled = idx > 0;
             _moveDownButton.Enabled = idx >= 0 && idx < settings.Rules.Count - 1;
-            _deleteRuleButton.Enabled = idx >= 0;
         }
 
         private void BuildLayout()
@@ -429,37 +317,47 @@ namespace OpenTabletDriver.UX.Controls
             var telemetryBox = new GroupBox
             {
                 Text = "Live Profiler Telemetry",
-                Content = new StackLayout
-                {
-                    Padding = new Padding(8, 6),
-                    Orientation = Orientation.Vertical,
-                    Spacing = 4,
-                    Items = { _activeContextLabel }
-                }
+                Padding = new Padding(12, 10),
+                Content = _activeContextLabel
             };
 
-            var generalGroup = new GroupBox
+            var optionsBox = new GroupBox
             {
-                Text = "General Options",
-                Content = new StackLayout
-                {
-                    Orientation = Orientation.Vertical,
-                    Spacing = 6,
-                    Items = { _enableCheckBox, _syncFocusCheckBox }
-                }
-            };
-
-            var fallbacksGroup = new GroupBox
-            {
-                Text = "Default Fallbacks (When No Rule Matches)",
+                Text = "General Options & Default Fallbacks",
+                Padding = new Padding(14, 12),
                 Content = new TableLayout
                 {
-                    Spacing = new Size(10, 6),
+                    Spacing = new Size(24, 12),
                     Rows =
                     {
-                        new TableRow(new Label { Text = "Default App Profile:" }, _defaultPresetDropDown),
-                        new TableRow(new Label { Text = "Default Output Mode:" }, _defaultModeDropDown),
-                        null
+                        new TableRow(
+                            new TableCell(_enableCheckBox, true),
+                            new TableCell(_syncFocusCheckBox, true)
+                        ),
+                        new TableRow(
+                            new TableLayout
+                            {
+                                Spacing = new Size(10, 6),
+                                Rows =
+                                {
+                                    new TableRow(
+                                        new Label { Text = "Default App Profile:", VerticalAlignment = VerticalAlignment.Center },
+                                        _defaultPresetDropDown
+                                    )
+                                }
+                            },
+                            new TableLayout
+                            {
+                                Spacing = new Size(10, 6),
+                                Rows =
+                                {
+                                    new TableRow(
+                                        new Label { Text = "Default Output Mode:", VerticalAlignment = VerticalAlignment.Center },
+                                        _defaultModeDropDown
+                                    )
+                                }
+                            }
+                        )
                     }
                 }
             };
@@ -468,9 +366,11 @@ namespace OpenTabletDriver.UX.Controls
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 8,
+                VerticalContentAlignment = VerticalAlignment.Center,
                 Items =
                 {
                     _newRuleButton,
+                    _editRuleButton,
                     _deleteRuleButton,
                     new StackLayoutItem(null, true),
                     _moveUpButton,
@@ -478,37 +378,19 @@ namespace OpenTabletDriver.UX.Controls
                 }
             };
 
-            var ruleForm = new TableLayout
-            {
-                Spacing = new Size(8, 6),
-                Rows =
-                {
-                    new TableRow(new Label { Text = "Rule Name:" }, _ruleNameTextBox, _detectButton),
-                    new TableRow(new Label { Text = "Target Type:" }, _targetTypeDropDown, new Label { Text = "Target criteria" }),
-                    new TableRow(new Label { Text = "Match Type:" }, _matchTypeDropDown, new Label { Text = "Matching algorithm" }),
-                    new TableRow(new Label { Text = "Pattern:" }, _patternTextBox, null),
-                    new TableRow(new Label { Text = "Mapped Preset:" }, _presetDropDown, null),
-                    new TableRow(new Label { Text = "Mapped Output Mode:" }, _modeDropDown, null),
-                    new TableRow(new Label { Text = "Display Mapping:" }, _displayMappingDropDown, null),
-                    new TableRow(new Label { Text = "Target Monitor:" }, _targetMonitorTextBox, null),
-                    new TableRow(null, _applyRuleButton, null),
-                    null
-                }
-            };
-
             var rulesGroup = new GroupBox
             {
                 Text = "Application & Layer Profile Rules (Evaluated Top-to-Bottom)",
+                Padding = new Padding(14, 12),
                 Content = new StackLayout
                 {
                     Orientation = Orientation.Vertical,
-                    Spacing = 8,
+                    Spacing = 10,
                     HorizontalContentAlignment = HorizontalAlignment.Stretch,
                     Items =
                     {
                         new StackLayoutItem(_rulesGrid, true),
-                        gridToolbar,
-                        new GroupBox { Text = "Rule Configuration", Content = ruleForm }
+                        gridToolbar
                     }
                 }
             };
@@ -516,7 +398,7 @@ namespace OpenTabletDriver.UX.Controls
             var bottomBar = new StackLayout
             {
                 Orientation = Orientation.Horizontal,
-                Spacing = 10,
+                Spacing = 12,
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Items = { _saveButton, _statusLabel }
             };
@@ -526,13 +408,13 @@ namespace OpenTabletDriver.UX.Controls
                 Content = new StackLayout
                 {
                     Orientation = Orientation.Vertical,
-                    Spacing = 12,
+                    Padding = new Padding(16, 14),
+                    Spacing = 14,
                     HorizontalContentAlignment = HorizontalAlignment.Stretch,
                     Items =
                     {
                         telemetryBox,
-                        generalGroup,
-                        fallbacksGroup,
+                        optionsBox,
                         new StackLayoutItem(rulesGroup, true),
                         bottomBar
                     }
@@ -542,26 +424,7 @@ namespace OpenTabletDriver.UX.Controls
 
         private void LoadDropdownOptions()
         {
-            _targetTypeDropDown.Items.Clear();
-            _targetTypeDropDown.Items.Add(new ListItem { Text = "Window Class (e.g. krita)", Key = nameof(RuleTargetType.WindowClass) });
-            _targetTypeDropDown.Items.Add(new ListItem { Text = "Window Title (e.g. artwork.kra)", Key = nameof(RuleTargetType.WindowTitle) });
-            _targetTypeDropDown.Items.Add(new ListItem { Text = "Wayland Layer Surface (e.g. noctalia)", Key = nameof(RuleTargetType.LayerNamespace) });
-            _targetTypeDropDown.SelectedKey = nameof(RuleTargetType.WindowClass);
-
-            _matchTypeDropDown.Items.Clear();
-            _matchTypeDropDown.Items.Add(new ListItem { Text = "Exact (Case-Insensitive)", Key = nameof(RuleMatchType.Exact) });
-            _matchTypeDropDown.Items.Add(new ListItem { Text = "Contains (Substring)", Key = nameof(RuleMatchType.Contains) });
-            _matchTypeDropDown.Items.Add(new ListItem { Text = "Regex (Regular Expression)", Key = nameof(RuleMatchType.Regex) });
-            _matchTypeDropDown.SelectedKey = nameof(RuleMatchType.Exact);
-
-            _displayMappingDropDown.Items.Clear();
-            _displayMappingDropDown.Items.Add(new ListItem { Text = "Inherit (Unchanged)", Key = nameof(RuleDisplayMapping.Inherit) });
-            _displayMappingDropDown.Items.Add(new ListItem { Text = "Follow Window Focus", Key = nameof(RuleDisplayMapping.FollowFocus) });
-            _displayMappingDropDown.Items.Add(new ListItem { Text = "Specific Monitor Name/ID", Key = nameof(RuleDisplayMapping.SpecificMonitor) });
-            _displayMappingDropDown.SelectedKey = nameof(RuleDisplayMapping.Inherit);
-
             _presetNames.Clear();
-            _presetNames.Add("(None)");
             try
             {
                 AppInfo.PresetManager.Refresh();
@@ -576,7 +439,6 @@ namespace OpenTabletDriver.UX.Controls
             }
 
             _outputModes.Clear();
-            _outputModes.Add(("", "(None)"));
             try
             {
                 var types = AppInfo.PluginManager.GetChildTypes<IOutputMode>()
@@ -592,26 +454,23 @@ namespace OpenTabletDriver.UX.Controls
                 Log.Exception(ex);
             }
 
-            PopulateDropdowns();
+            PopulateDefaultDropdowns();
         }
 
-        private void PopulateDropdowns()
+        private void PopulateDefaultDropdowns()
         {
             _defaultPresetDropDown.Items.Clear();
-            _presetDropDown.Items.Clear();
+            _defaultPresetDropDown.Items.Add(new ListItem { Text = "— (None) —", Key = "" });
             foreach (var name in _presetNames)
             {
-                var key = name == "(None)" ? "" : name;
-                _defaultPresetDropDown.Items.Add(new ListItem { Text = name, Key = key });
-                _presetDropDown.Items.Add(new ListItem { Text = name, Key = key });
+                _defaultPresetDropDown.Items.Add(new ListItem { Text = name, Key = name });
             }
 
             _defaultModeDropDown.Items.Clear();
-            _modeDropDown.Items.Clear();
+            _defaultModeDropDown.Items.Add(new ListItem { Text = "— (None) —", Key = "" });
             foreach (var (key, name) in _outputModes)
             {
                 _defaultModeDropDown.Items.Add(new ListItem { Text = name, Key = key });
-                _modeDropDown.Items.Add(new ListItem { Text = name, Key = key });
             }
         }
 
@@ -668,7 +527,7 @@ namespace OpenTabletDriver.UX.Controls
             catch (Exception ex)
             {
                 Log.Exception(ex);
-                MessageBox.Show($"Failed to save app profiler settings: {ex.Message}", MessageBoxType.Error);
+                _statusLabel.Text = $"Error: {ex.Message}";
             }
         }
 
@@ -677,30 +536,44 @@ namespace OpenTabletDriver.UX.Controls
             _telemetryTimer = new UITimer { Interval = 1.0 };
             _telemetryTimer.Elapsed += async (s, e) =>
             {
-                if (!Visible || App.Driver?.Instance == null) return;
                 try
                 {
-                    var ctx = await App.Driver.Instance.GetActiveAppProfileContext();
-                    if (ctx != null)
+                    var daemon = App.Driver?.Instance;
+                    if (daemon == null) return;
+
+                    var context = await daemon.GetActiveAppProfileContext();
+                    if (context == null) return;
+
+                    var text = "Active Context: ";
+                    if (context.IsHoveringLayer && !string.IsNullOrEmpty(context.LayerNamespace))
                     {
-                        string contextDesc = ctx.IsHoveringLayer
-                            ? $"[Layer: {ctx.LayerNamespace}]"
-                            : $"[Class: {(string.IsNullOrEmpty(ctx.WindowClass) ? "(Desktop)" : ctx.WindowClass)}]";
-
-                        string matchDesc = !string.IsNullOrEmpty(ctx.MatchedRuleName)
-                            ? $"➔ Matched: \"{ctx.MatchedRuleName}\""
-                            : "➔ (Default Fallback / Base Profile)";
-
-                        string profileDesc = !string.IsNullOrEmpty(ctx.ActivePreset)
-                            ? $" [Preset: {ctx.ActivePreset}]"
-                            : "";
-
-                        _activeContextLabel.Text = $"Active Context: {contextDesc} {matchDesc}{profileDesc}";
+                        text += $"[Layer: {context.LayerNamespace}]";
                     }
+                    else if (!string.IsNullOrEmpty(context.WindowClass))
+                    {
+                        text += $"[Class: {context.WindowClass}]";
+                    }
+                    else
+                    {
+                        text += "[Desktop / Unfocused]";
+                    }
+
+                    if (!string.IsNullOrEmpty(context.MatchedRuleName))
+                    {
+                        text += $" ➔ Matched Rule: \"{context.MatchedRuleName}\"";
+                        if (!string.IsNullOrEmpty(context.ActivePreset))
+                            text += $" [Preset: {context.ActivePreset}]";
+                    }
+                    else
+                    {
+                        text += " ➔ (Default Fallback / Base Profile)";
+                    }
+
+                    _activeContextLabel.Text = text;
                 }
                 catch
                 {
-                    // Ignore transient IPC timeouts
+                    // Ignore transient communication errors while daemon is busy
                 }
             };
             _telemetryTimer.Start();
