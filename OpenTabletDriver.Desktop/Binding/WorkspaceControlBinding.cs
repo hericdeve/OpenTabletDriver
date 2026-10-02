@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using OpenTabletDriver.Desktop.Compositor;
 using OpenTabletDriver.Desktop.Contracts;
@@ -11,14 +13,45 @@ namespace OpenTabletDriver.Desktop.Binding
     [PluginName("Workspace Control")]
     public class WorkspaceControlBinding : IStateBinding
     {
+        private static readonly string[] _validActions =
+        {
+            "Focus Workspace",
+            "Move Window to Workspace"
+        };
+
+        private static readonly string[] _validTargets =
+        {
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "Next",
+            "Previous",
+            "Special"
+        };
+
+        public static IEnumerable<string> ValidActions => _validActions;
+        public static IEnumerable<string> ValidTargets => _validTargets;
+
         [Resolved]
         public IDriverDaemon? Daemon { get; set; }
 
-        [Property("Action"), ToolTip("Action to perform (Focus or Move Window)")]
-        [PropertyValidated(nameof(ValidateAction))]
+        [Property("Action"),
+         DefaultPropertyValue("Focus Workspace"),
+         ToolTip("Action to perform (Focus or Move Window)"),
+         PropertyValidated(nameof(ValidActions))]
         public string Action { get; set; } = "Focus Workspace";
 
-        [Property("Target"), ToolTip("Target Workspace (1, 2, 3, 4, 5, Next, Previous, Special)")]
+        [Property("Target"),
+         DefaultPropertyValue("1"),
+         ToolTip("Target Workspace (1, 2, 3, 4, 5, Next, Previous, Special)"),
+         PropertyValidated(nameof(ValidTargets))]
         public string Target { get; set; } = "1";
 
         [BooleanProperty("Follow Focus", "Switch active workspace after moving window")]

@@ -248,7 +248,28 @@ namespace OpenTabletDriver.Desktop.Reflection
                 return $"Scroll {dir}{(invert ? " (Inverted)" : "")}";
             }
 
-            // 7. Generic formatted fallback
+            // 7. WindowControlBinding
+            if (Path == "OpenTabletDriver.Desktop.Binding.WindowControlBinding")
+            {
+                var action = Settings.FirstOrDefault(s => s.Property == "Action")?.Value?.ToString() ?? "Focus Window";
+                if (action == "Toggle Float" || action == "Toggle Fullscreen")
+                    return action;
+
+                var dir = Settings.FirstOrDefault(s => s.Property == "Direction")?.Value?.ToString() ?? "Next";
+                return $"{action} ({dir})";
+            }
+
+            // 8. WorkspaceControlBinding
+            if (Path == "OpenTabletDriver.Desktop.Binding.WorkspaceControlBinding")
+            {
+                var action = Settings.FirstOrDefault(s => s.Property == "Action")?.Value?.ToString() ?? "Focus Workspace";
+                var target = Settings.FirstOrDefault(s => s.Property == "Target")?.Value?.ToString() ?? "1";
+                if (action == "Move Window to Workspace")
+                    return $"Move to Workspace {target}";
+                return $"Workspace {target}";
+            }
+
+            // 9. Generic formatted fallback
             var validSettings = Settings.Where(s => s.HasValue && s.Value != null).ToList();
             if (validSettings.Count == 0)
                 return name;
@@ -330,6 +351,24 @@ namespace OpenTabletDriver.Desktop.Reflection
             // If FloatingHud
             if (store.Path?.EndsWith("FloatingHudBinding") == true)
                 return "HUD";
+
+            // If WindowControl
+            if (store.Path?.EndsWith("WindowControlBinding") == true)
+            {
+                var action = store.Settings.FirstOrDefault(s => s.Property == "Action")?.Value?.ToString() ?? "Focus Window";
+                if (action == "Toggle Float") return "Toggle Float";
+                if (action == "Toggle Fullscreen") return "Fullscreen";
+                var dir = store.Settings.FirstOrDefault(s => s.Property == "Direction")?.Value?.ToString() ?? "Next";
+                return action == "Move Window" ? $"Move {dir}" : $"Focus {dir}";
+            }
+
+            // If WorkspaceControl
+            if (store.Path?.EndsWith("WorkspaceControlBinding") == true)
+            {
+                var action = store.Settings.FirstOrDefault(s => s.Property == "Action")?.Value?.ToString() ?? "Focus Workspace";
+                var target = store.Settings.FirstOrDefault(s => s.Property == "Target")?.Value?.ToString() ?? "1";
+                return action == "Move Window to Workspace" ? $"Move -> WS {target}" : $"WS {target}";
+            }
 
             // Otherwise, friendly name or class name
             return store.Name ?? store.Path?.Split('.').Last() ?? "Action";

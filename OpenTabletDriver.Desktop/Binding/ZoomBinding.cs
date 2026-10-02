@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using OpenTabletDriver.Desktop.Interop;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Attributes;
@@ -50,7 +51,10 @@ namespace OpenTabletDriver.Desktop.Binding
             }
         }
 
-        [Property("Direction"), DefaultPropertyValue("In")]
+        private static readonly string[] _validDirections = { "In", "Out" };
+        public static IEnumerable<string> ValidDirections => _validDirections;
+
+        [Property("Direction"), DefaultPropertyValue("In"), PropertyValidated(nameof(ValidDirections))]
         public virtual string Direction
         {
             get => _direction.ToString();

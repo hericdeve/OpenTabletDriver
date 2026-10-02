@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using OpenTabletDriver.Desktop.Compositor;
 using OpenTabletDriver.Desktop.Contracts;
@@ -11,13 +13,40 @@ namespace OpenTabletDriver.Desktop.Binding
     [PluginName("Window Control")]
     public class WindowControlBinding : IStateBinding
     {
+        private static readonly string[] _validActions =
+        {
+            "Focus Window",
+            "Move Window",
+            "Toggle Float",
+            "Toggle Fullscreen"
+        };
+
+        private static readonly string[] _validDirections =
+        {
+            "Next",
+            "Previous",
+            "Left",
+            "Right",
+            "Up",
+            "Down"
+        };
+
+        public static IEnumerable<string> ValidActions => _validActions;
+        public static IEnumerable<string> ValidDirections => _validDirections;
+
         [Resolved]
         public IDriverDaemon? Daemon { get; set; }
 
-        [Property("Action"), ToolTip("Window Action (Focus Window, Move Window, Toggle Float, Toggle Fullscreen)")]
+        [Property("Action"),
+         DefaultPropertyValue("Focus Window"),
+         ToolTip("Window Action (Focus Window, Move Window, Toggle Float, Toggle Fullscreen)"),
+         PropertyValidated(nameof(ValidActions))]
         public string Action { get; set; } = "Focus Window";
 
-        [Property("Direction"), ToolTip("Direction for focus or move (Left, Right, Up, Down, Next, Previous)")]
+        [Property("Direction"),
+         DefaultPropertyValue("Next"),
+         ToolTip("Direction for focus or move (Left, Right, Up, Down, Next, Previous)"),
+         PropertyValidated(nameof(ValidDirections))]
         public string Direction { get; set; } = "Next";
 
         public void Press(TabletReference tablet, IDeviceReport report)

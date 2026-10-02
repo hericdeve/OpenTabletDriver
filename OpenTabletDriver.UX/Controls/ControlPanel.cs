@@ -56,20 +56,22 @@ namespace OpenTabletDriver.UX.Controls
 
             control.Pages.Add(new TabPage
             {
-                Text = "Pen Settings",
+                ID = "pen",
+                Text = "Pen",
                 Content = penBindingEditor = new PenBindingEditor()
             });
 
             control.Pages.Add(new TabPage
             {
-                Text = "Auxiliary Settings",
+                ID = "auxiliary",
+                Text = "Express Keys",
                 Content = auxBindingEditor = new AuxiliaryBindingEditor()
             });
 
             control.Pages.Add(new TabPage
             {
                 ID = "mouse",
-                Text = "Mouse Settings",
+                Text = "Mouse",
                 Content = mouseBindingEditor = new MouseBindingEditor()
             });
 
@@ -120,7 +122,11 @@ namespace OpenTabletDriver.UX.Controls
             {
                 foreach (var page in tabControl.Pages)
                 {
-                    if (string.Equals(page.Text, tabName, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(page.Text, tabName, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(page.ID, tabName, StringComparison.OrdinalIgnoreCase) ||
+                        (tabName.Equals("Pen Settings", StringComparison.OrdinalIgnoreCase) && page.Text.Equals("Pen", StringComparison.OrdinalIgnoreCase)) ||
+                        (tabName.Equals("Auxiliary Settings", StringComparison.OrdinalIgnoreCase) && page.Text.Equals("Express Keys", StringComparison.OrdinalIgnoreCase)) ||
+                        (tabName.Equals("Mouse Settings", StringComparison.OrdinalIgnoreCase) && page.Text.Equals("Mouse", StringComparison.OrdinalIgnoreCase)))
                     {
                         tabControl.SelectedPage = page;
                         break;
@@ -230,7 +236,7 @@ namespace OpenTabletDriver.UX.Controls
                     wheelBindingEditor.ProfileBinding.Bind(ProfileBinding);
                     var pageIndex = tabControl.Pages.IndexOf(mouseBindingEditor.Parent as TabPage);
                     wheelBindingEditors.Add(wheelBindingEditor);
-                    var wheelPage = new TabPage(wheelBindingEditor) { Text = $"Wheel {i + 1} Bindings" };
+                    var wheelPage = new TabPage(wheelBindingEditor) { Text = $"Wheel {i + 1}" };
                     if (pageIndex >= 0)
                         tabControl.Pages.Insert(pageIndex, wheelPage);
                     else

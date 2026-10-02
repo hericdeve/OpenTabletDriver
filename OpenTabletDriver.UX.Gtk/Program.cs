@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.UX.Gtk.Hud;
+using OpenTabletDriver.UX.Gtk.Theme;
 
 namespace OpenTabletDriver.UX.Gtk
 {
@@ -48,6 +49,7 @@ namespace OpenTabletDriver.UX.Gtk
 
             App.Initialized += () =>
             {
+                GtkThemeManager.Initialize();
                 HudManager.Instance.Initialize();
             };
 
