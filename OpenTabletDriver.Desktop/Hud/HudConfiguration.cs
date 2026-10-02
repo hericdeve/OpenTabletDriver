@@ -8,6 +8,8 @@ namespace OpenTabletDriver.Desktop.Hud
     public class HudConfiguration
     {
         public HudFormFactor FormFactor { get; set; } = HudFormFactor.RadialMenu;
+        public HudThemeStyle ThemeStyle { get; set; } = HudThemeStyle.Translucent;
+        public string FontFamily { get; set; } = "Sans";
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<HudItem> Items { get; set; } = new();
         public float Radius { get; set; } = 130f;
@@ -24,6 +26,8 @@ namespace OpenTabletDriver.Desktop.Hud
             var config = new HudConfiguration
             {
                 FormFactor = HudFormFactor.RadialMenu,
+                ThemeStyle = HudThemeStyle.Translucent,
+                FontFamily = "Sans",
                 Radius = 130f,
                 DeadzoneRadius = 35f,
                 RightHanded = true,

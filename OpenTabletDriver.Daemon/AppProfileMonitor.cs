@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using OpenTabletDriver.Desktop;
+using OpenTabletDriver.Desktop.AppProfiler;
 using OpenTabletDriver.Desktop.Interop.AppProfiler;
 using OpenTabletDriver.Desktop.Profiles;
 using OpenTabletDriver.Desktop.Reflection;
@@ -15,6 +18,8 @@ namespace OpenTabletDriver.Daemon
 {
     public sealed class AppProfileMonitor : IDisposable
     {
+        private static readonly ConcurrentDictionary<string, Regex?> _regexCache = new(StringComparer.Ordinal);
+
         private readonly DriverDaemon _daemon;
         private readonly List<IActiveWindowProvider> _providers;
         private readonly SemaphoreSlim _profileLock = new(1, 1);
@@ -26,13 +31,30 @@ namespace OpenTabletDriver.Daemon
         private string? _hoveredNamespace;
         private string _lastActiveWindowClass = string.Empty;
         private string _lastActiveWindowTitle = string.Empty;
+        private AppProfileRule? _activeMatchedRule;
 
         public string CurrentWindowClass => _lastActiveWindowClass;
         public string CurrentWindowTitle => _lastActiveWindowTitle;
+        public AppProfileRule? ActiveMatchedRule => _activeMatchedRule;
 
         public void ForceRefreshActiveWindow()
         {
             _activeProvider?.ForceRefreshActiveWindow();
+        }
+
+        public ActiveAppProfileContext GetActiveContext()
+        {
+            return new ActiveAppProfileContext
+            {
+                WindowClass = _lastActiveWindowClass,
+                WindowTitle = _lastActiveWindowTitle,
+                IsHoveringLayer = _isHoveringLayer,
+                LayerNamespace = _hoveredNamespace,
+                MatchedRuleId = _activeMatchedRule?.Id,
+                MatchedRuleName = _activeMatchedRule?.Name,
+                ActivePreset = _currentPreset,
+                ActiveOutputMode = _currentOutputMode
+            };
         }
 
         public AppProfileMonitor(DriverDaemon daemon)
@@ -104,6 +126,7 @@ namespace OpenTabletDriver.Daemon
                 _currentOutputMode = null;
                 _isHoveringLayer = false;
                 _hoveredNamespace = null;
+                _activeMatchedRule = null;
             }
         }
 
@@ -113,12 +136,27 @@ namespace OpenTabletDriver.Daemon
             _currentOutputMode = null;
             _isHoveringLayer = false;
             _hoveredNamespace = null;
+            _activeMatchedRule = null;
         }
 
         private HashSet<string> GetTargetNamespaces()
         {
             var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var appSettings = _daemon.AppProfilerSettings;
+            if (appSettings == null)
+                return targets;
+
+            if (appSettings.Rules != null)
+            {
+                foreach (var rule in appSettings.Rules)
+                {
+                    if (rule.Enabled && rule.TargetType == RuleTargetType.LayerNamespace && !string.IsNullOrWhiteSpace(rule.Pattern))
+                    {
+                        targets.Add(rule.Pattern);
+                    }
+                }
+            }
+
             if (appSettings.TrackedNamespaces != null)
             {
                 foreach (var ns in appSettings.TrackedNamespaces)
@@ -190,6 +228,67 @@ namespace OpenTabletDriver.Daemon
             _ = ApplyActiveProfileAsync(e.WindowClass, e.WindowTitle);
         }
 
+        private static bool MatchesRule(AppProfileRule rule, string windowClass, string windowTitle, bool isHoveringLayer, string? hoveredNamespace)
+        {
+            if (!rule.Enabled || string.IsNullOrWhiteSpace(rule.Pattern))
+                return false;
+
+            string candidate;
+            if (rule.TargetType == RuleTargetType.LayerNamespace)
+            {
+                if (!isHoveringLayer || string.IsNullOrEmpty(hoveredNamespace))
+                    return false;
+                candidate = hoveredNamespace;
+            }
+            else
+            {
+                if (isHoveringLayer)
+                    return false; // Layer takes precedence; window rules do not evaluate while hovering a layer
+
+                candidate = rule.TargetType switch
+                {
+                    RuleTargetType.WindowClass => windowClass,
+                    RuleTargetType.WindowTitle => windowTitle,
+                    _ => string.Empty
+                };
+            }
+
+            if (string.IsNullOrEmpty(candidate))
+                return false;
+
+            return rule.MatchType switch
+            {
+                RuleMatchType.Exact => string.Equals(candidate, rule.Pattern, StringComparison.OrdinalIgnoreCase),
+                RuleMatchType.Contains => candidate.IndexOf(rule.Pattern, StringComparison.OrdinalIgnoreCase) >= 0,
+                RuleMatchType.Regex => MatchRegexSafe(candidate, rule.Pattern),
+                _ => false
+            };
+        }
+
+        private static bool MatchRegexSafe(string input, string pattern)
+        {
+            try
+            {
+                var regex = _regexCache.GetOrAdd(pattern, p =>
+                {
+                    try
+                    {
+                        return new Regex(p, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50));
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                });
+
+                return regex != null && regex.IsMatch(input);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static bool TryLookupCaseInsensitive(Dictionary<string, string>? dict, string key, out string value)
         {
             value = string.Empty;
@@ -229,32 +328,56 @@ namespace OpenTabletDriver.Daemon
                 var appSettings = _daemon.AppProfilerSettings;
                 var presetManager = OpenTabletDriver.Desktop.AppInfo.PresetManager;
 
-                string? targetPreset = null;
-                if (_isHoveringLayer && !string.IsNullOrEmpty(_hoveredNamespace) && TryLookupCaseInsensitive(appSettings.NamespaceProfiles, _hoveredNamespace, out var nsPreset))
+                AppProfileRule? matchedRule = null;
+                if (appSettings.Rules != null && appSettings.Rules.Count > 0)
                 {
-                    targetPreset = nsPreset;
-                }
-                else if (!_isHoveringLayer && TryLookupCaseInsensitive(appSettings.AppProfiles, windowClass, out var presetName))
-                {
-                    targetPreset = presetName;
-                }
-                else if (!string.IsNullOrEmpty(appSettings.DefaultAppProfile))
-                {
-                    targetPreset = appSettings.DefaultAppProfile;
+                    matchedRule = appSettings.Rules.FirstOrDefault(r => MatchesRule(r, windowClass, windowTitle, _isHoveringLayer, _hoveredNamespace));
                 }
 
+                _activeMatchedRule = matchedRule;
+
+                string? targetPreset = null;
                 string? targetOutputMode = null;
-                if (_isHoveringLayer && !string.IsNullOrEmpty(_hoveredNamespace) && TryLookupCaseInsensitive(appSettings.NamespaceOutputModes, _hoveredNamespace, out var nsOutputMode))
+                var targetDisplayMapping = RuleDisplayMapping.Inherit;
+                string? targetMonitor = null;
+
+                if (matchedRule != null)
                 {
-                    targetOutputMode = nsOutputMode;
+                    targetPreset = !string.IsNullOrEmpty(matchedRule.PresetName) ? matchedRule.PresetName : appSettings.DefaultAppProfile;
+                    targetOutputMode = !string.IsNullOrEmpty(matchedRule.OutputMode) ? matchedRule.OutputMode : appSettings.DefaultOutputMode;
+                    targetDisplayMapping = matchedRule.DisplayMapping;
+                    targetMonitor = matchedRule.TargetMonitor;
                 }
-                else if (!_isHoveringLayer && TryLookupCaseInsensitive(appSettings.AppOutputModes, windowClass, out var outputModeName))
+                else
                 {
-                    targetOutputMode = outputModeName;
-                }
-                else if (!string.IsNullOrEmpty(appSettings.DefaultOutputMode))
-                {
-                    targetOutputMode = appSettings.DefaultOutputMode;
+                    // Fallback to legacy dictionary lookup if available
+                    if (_isHoveringLayer && !string.IsNullOrEmpty(_hoveredNamespace) && TryLookupCaseInsensitive(appSettings.NamespaceProfiles, _hoveredNamespace, out var nsPreset))
+                    {
+                        targetPreset = nsPreset;
+                    }
+                    else if (!_isHoveringLayer && TryLookupCaseInsensitive(appSettings.AppProfiles, windowClass, out var presetName))
+                    {
+                        targetPreset = presetName;
+                    }
+                    else if (!string.IsNullOrEmpty(appSettings.DefaultAppProfile))
+                    {
+                        targetPreset = appSettings.DefaultAppProfile;
+                    }
+
+                    if (_isHoveringLayer && !string.IsNullOrEmpty(_hoveredNamespace) && TryLookupCaseInsensitive(appSettings.NamespaceOutputModes, _hoveredNamespace, out var nsOutputMode))
+                    {
+                        targetOutputMode = nsOutputMode;
+                    }
+                    else if (!_isHoveringLayer && TryLookupCaseInsensitive(appSettings.AppOutputModes, windowClass, out var outputModeName))
+                    {
+                        targetOutputMode = outputModeName;
+                    }
+                    else if (!string.IsNullOrEmpty(appSettings.DefaultOutputMode))
+                    {
+                        targetOutputMode = appSettings.DefaultOutputMode;
+                    }
+
+                    targetDisplayMapping = appSettings.SyncFocus ? RuleDisplayMapping.FollowFocus : RuleDisplayMapping.Inherit;
                 }
 
                 bool presetChanged = targetPreset != _currentPreset;
@@ -268,7 +391,9 @@ namespace OpenTabletDriver.Daemon
                     {
                         if (presetChanged)
                         {
-                            Log.Write("AppProfileMonitor", $"Applying preset '{preset.Name}' for application '{windowClass}'.", LogLevel.Info);
+                            var targetName = _isHoveringLayer ? $"layer '{_hoveredNamespace}'" : $"application '{windowClass}'";
+                            var ruleText = matchedRule != null ? $" (rule: '{matchedRule.Name}')" : string.Empty;
+                            Log.Write("AppProfileMonitor", $"Applying preset '{preset.Name}' for {targetName}{ruleText}.", LogLevel.Info);
                         }
                         appliedSettings = preset.Settings.Clone();
                         _currentPreset = targetPreset;
@@ -284,7 +409,8 @@ namespace OpenTabletDriver.Daemon
                 {
                     if (presetChanged)
                     {
-                        Log.Write("AppProfileMonitor", $"Restoring base profile for application '{windowClass}'.", LogLevel.Info);
+                        var targetName = _isHoveringLayer ? $"layer '{_hoveredNamespace}'" : $"application '{windowClass}'";
+                        Log.Write("AppProfileMonitor", $"Restoring base profile for {targetName}.", LogLevel.Info);
                     }
                     appliedSettings = baseSettings.Clone();
                     _currentPreset = null;
@@ -296,38 +422,37 @@ namespace OpenTabletDriver.Daemon
                 }
 
                 bool syncFocusChangedSettings = false;
-                if (appSettings.SyncFocus && _activeProvider is HyprlandWindowProvider)
+                if (targetDisplayMapping == RuleDisplayMapping.FollowFocus && _activeProvider is HyprlandWindowProvider)
                 {
                     var activeMonitor = OpenTabletDriver.Desktop.Interop.Display.HyprlandDisplayInterop.GetActiveMonitor(null);
                     if (activeMonitor != null)
                     {
                         var targetDisplay = OpenTabletDriver.Desktop.Interop.Display.HyprlandDisplayInterop.ToAreaSettings(activeMonitor);
-                        foreach (var profile in appliedSettings.Profiles)
-                        {
-                            if (profile.AbsoluteModeSettings != null)
-                            {
-                                var currentDisplay = profile.AbsoluteModeSettings.Display;
-                                if (currentDisplay.Width != targetDisplay.Width ||
-                                    currentDisplay.Height != targetDisplay.Height ||
-                                    currentDisplay.X != targetDisplay.X ||
-                                    currentDisplay.Y != targetDisplay.Y)
-                                {
-                                    profile.AbsoluteModeSettings.Display = new AreaSettings
-                                    {
-                                        Width = targetDisplay.Width,
-                                        Height = targetDisplay.Height,
-                                        X = targetDisplay.X,
-                                        Y = targetDisplay.Y,
-                                        Rotation = targetDisplay.Rotation
-                                    };
-                                    syncFocusChangedSettings = true;
-                                }
-                            }
-                        }
+                        syncFocusChangedSettings = ApplyDisplayToProfiles(appliedSettings, targetDisplay);
 
                         if (syncFocusChangedSettings)
                         {
-                            Log.Write("AppProfileMonitor", $"Syncing focus to monitor at ({targetDisplay.X}, {targetDisplay.Y}) for application '{windowClass}'.", LogLevel.Info);
+                            var targetName = _isHoveringLayer ? $"layer '{_hoveredNamespace}'" : $"application '{windowClass}'";
+                            Log.Write("AppProfileMonitor", $"Syncing focus to monitor '{activeMonitor.Name}' at ({targetDisplay.X}, {targetDisplay.Y}) for {targetName}.", LogLevel.Info);
+                        }
+                    }
+                }
+                else if (targetDisplayMapping == RuleDisplayMapping.SpecificMonitor && !string.IsNullOrEmpty(targetMonitor))
+                {
+                    var monitors = OpenTabletDriver.Desktop.Interop.Display.HyprlandDisplayInterop.GetMonitors(null);
+                    var matchedMonitor = monitors.FirstOrDefault(m =>
+                        string.Equals(m.Name, targetMonitor, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(m.Index.ToString(), targetMonitor, StringComparison.OrdinalIgnoreCase));
+
+                    if (matchedMonitor != null)
+                    {
+                        var targetDisplay = OpenTabletDriver.Desktop.Interop.Display.HyprlandDisplayInterop.ToAreaSettings(matchedMonitor);
+                        syncFocusChangedSettings = ApplyDisplayToProfiles(appliedSettings, targetDisplay);
+
+                        if (syncFocusChangedSettings)
+                        {
+                            var targetName = _isHoveringLayer ? $"layer '{_hoveredNamespace}'" : $"application '{windowClass}'";
+                            Log.Write("AppProfileMonitor", $"Setting display mapping to monitor '{matchedMonitor.Name}' at ({targetDisplay.X}, {targetDisplay.Y}) for {targetName}.", LogLevel.Info);
                         }
                     }
                 }
@@ -349,7 +474,8 @@ namespace OpenTabletDriver.Daemon
                     {
                         if (outputModeChanged)
                         {
-                            Log.Write("AppProfileMonitor", $"Applying output mode '{resolvedOutputMode}' for application '{windowClass}'.", LogLevel.Info);
+                            var targetName = _isHoveringLayer ? $"layer '{_hoveredNamespace}'" : $"application '{windowClass}'";
+                            Log.Write("AppProfileMonitor", $"Applying output mode '{resolvedOutputMode}' for {targetName}.", LogLevel.Info);
                         }
 
                         foreach (var profile in appliedSettings.Profiles)
@@ -380,6 +506,34 @@ namespace OpenTabletDriver.Daemon
             }
         }
 
+        private static bool ApplyDisplayToProfiles(Settings appliedSettings, AreaSettings targetDisplay)
+        {
+            bool changed = false;
+            foreach (var profile in appliedSettings.Profiles)
+            {
+                if (profile.AbsoluteModeSettings != null)
+                {
+                    var currentDisplay = profile.AbsoluteModeSettings.Display;
+                    if (currentDisplay.Width != targetDisplay.Width ||
+                        currentDisplay.Height != targetDisplay.Height ||
+                        currentDisplay.X != targetDisplay.X ||
+                        currentDisplay.Y != targetDisplay.Y)
+                    {
+                        profile.AbsoluteModeSettings.Display = new AreaSettings
+                        {
+                            Width = targetDisplay.Width,
+                            Height = targetDisplay.Height,
+                            X = targetDisplay.X,
+                            Y = targetDisplay.Y,
+                            Rotation = targetDisplay.Rotation
+                        };
+                        changed = true;
+                    }
+                }
+            }
+            return changed;
+        }
+
         private void EnsureOutputModeSettings(Profile profile)
         {
             if (profile.RelativeModeSettings == null)
@@ -408,7 +562,11 @@ namespace OpenTabletDriver.Daemon
 
                 appliedProfile.AbsoluteModeSettings.Display = new AreaSettings
                 {
-                    Area = currentProfile.AbsoluteModeSettings.Display.Area
+                    Width = currentProfile.AbsoluteModeSettings.Display.Width,
+                    Height = currentProfile.AbsoluteModeSettings.Display.Height,
+                    X = currentProfile.AbsoluteModeSettings.Display.X,
+                    Y = currentProfile.AbsoluteModeSettings.Display.Y,
+                    Rotation = currentProfile.AbsoluteModeSettings.Display.Rotation
                 };
             }
         }
@@ -535,7 +693,6 @@ namespace OpenTabletDriver.Daemon
             }
 
             _profileLock.Dispose();
-            GC.SuppressFinalize(this);
         }
     }
 }

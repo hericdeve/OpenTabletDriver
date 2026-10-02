@@ -968,6 +968,8 @@ namespace OpenTabletDriver.Daemon
                     var wsConfig = new HudConfiguration
                     {
                         FormFactor = _rootHudConfig.FormFactor,
+                        ThemeStyle = _rootHudConfig.ThemeStyle,
+                        FontFamily = _rootHudConfig.FontFamily,
                         Radius = _rootHudConfig.Radius,
                         DeadzoneRadius = _rootHudConfig.DeadzoneRadius,
                         Opacity = _rootHudConfig.Opacity,
@@ -1187,6 +1189,12 @@ namespace OpenTabletDriver.Daemon
         {
             if (item == null) return;
 
+            if (item.IsSubLayer)
+            {
+                await SwitchToWorkspaceSubLayer();
+                return;
+            }
+
             var effectiveBinding = item.GetEffectiveBinding();
             if (effectiveBinding != null)
             {
@@ -1386,6 +1394,12 @@ namespace OpenTabletDriver.Daemon
         {
             _appProfileMonitor?.ForceRefreshActiveWindow();
             return Task.FromResult<string?>(_appProfileMonitor?.CurrentWindowTitle);
+        }
+
+        public Task<OpenTabletDriver.Desktop.AppProfiler.ActiveAppProfileContext?> GetActiveAppProfileContext()
+        {
+            _appProfileMonitor?.ForceRefreshActiveWindow();
+            return Task.FromResult<OpenTabletDriver.Desktop.AppProfiler.ActiveAppProfileContext?>(_appProfileMonitor?.GetActiveContext());
         }
 
         private static async Task HandleMouseClick(string? button)

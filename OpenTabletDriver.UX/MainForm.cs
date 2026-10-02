@@ -814,7 +814,7 @@ namespace OpenTabletDriver.UX
         {
             LoadPresets();
 
-            if (trayIcon != null) // Check non-Linux
+            if (trayIcon != null && DesktopInterop.CurrentPlatform != PluginPlatform.Linux) // Check non-Linux
                 trayIcon.RefreshMenuItems();
 
             // Update Presets top-level menu
@@ -960,8 +960,30 @@ namespace OpenTabletDriver.UX
 
                     if (App.Current.AppProfilerSettings is AppProfilerSettings appSettings)
                     {
+                        var winClass = txtClass.Text.Trim();
+                        var existing = appSettings.Rules.FirstOrDefault(r =>
+                            r.TargetType == Desktop.AppProfiler.RuleTargetType.WindowClass &&
+                            string.Equals(r.Pattern, winClass, StringComparison.OrdinalIgnoreCase));
+
+                        if (existing != null)
+                        {
+                            existing.PresetName = txtName.Text;
+                        }
+                        else
+                        {
+                            appSettings.Rules.Add(new Desktop.AppProfiler.AppProfileRule
+                            {
+                                Name = winClass,
+                                TargetType = Desktop.AppProfiler.RuleTargetType.WindowClass,
+                                MatchType = Desktop.AppProfiler.RuleMatchType.Exact,
+                                Pattern = winClass,
+                                PresetName = txtName.Text,
+                                DisplayMapping = appSettings.SyncFocus ? Desktop.AppProfiler.RuleDisplayMapping.FollowFocus : Desktop.AppProfiler.RuleDisplayMapping.Inherit
+                            });
+                        }
+
                         appSettings.AppProfiles ??= new Dictionary<string, string>();
-                        appSettings.AppProfiles[txtClass.Text] = txtName.Text;
+                        appSettings.AppProfiles[winClass] = txtName.Text;
                         appSettings.EnableAppProfiler = true;
                         await App.Driver.Instance.SetAppProfilerSettings(appSettings);
                     }
@@ -1006,8 +1028,32 @@ namespace OpenTabletDriver.UX
             {
                 if (App.Current.AppProfilerSettings is AppProfilerSettings appSettings)
                 {
+                    var winClass = txtClass.Text.Trim();
+                    var modeName = outputModeSelector.SelectedItem!.FullName;
+
+                    var existing = appSettings.Rules.FirstOrDefault(r =>
+                        r.TargetType == Desktop.AppProfiler.RuleTargetType.WindowClass &&
+                        string.Equals(r.Pattern, winClass, StringComparison.OrdinalIgnoreCase));
+
+                    if (existing != null)
+                    {
+                        existing.OutputMode = modeName;
+                    }
+                    else
+                    {
+                        appSettings.Rules.Add(new Desktop.AppProfiler.AppProfileRule
+                        {
+                            Name = winClass,
+                            TargetType = Desktop.AppProfiler.RuleTargetType.WindowClass,
+                            MatchType = Desktop.AppProfiler.RuleMatchType.Exact,
+                            Pattern = winClass,
+                            OutputMode = modeName,
+                            DisplayMapping = appSettings.SyncFocus ? Desktop.AppProfiler.RuleDisplayMapping.FollowFocus : Desktop.AppProfiler.RuleDisplayMapping.Inherit
+                        });
+                    }
+
                     appSettings.AppOutputModes ??= new Dictionary<string, string>();
-                    appSettings.AppOutputModes[txtClass.Text] = outputModeSelector.SelectedItem!.FullName;
+                    appSettings.AppOutputModes[winClass] = modeName;
                     appSettings.EnableAppProfiler = true;
                     await App.Driver.Instance.SetAppProfilerSettings(appSettings);
                 }

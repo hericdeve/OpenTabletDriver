@@ -76,5 +76,6 @@ namespace OpenTabletDriver.Desktop.Contracts
 
         Task<string?> GetActiveWindowClass();
         Task<string?> GetActiveWindowTitle();
+        Task<AppProfiler.ActiveAppProfileContext?> GetActiveAppProfileContext();
     }
 }

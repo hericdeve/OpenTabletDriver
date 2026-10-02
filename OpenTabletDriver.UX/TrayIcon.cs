@@ -84,118 +84,136 @@ namespace OpenTabletDriver.UX
 
         public void RefreshMenuItems()
         {
-            var showWindow = new ButtonMenuItem
+            try
             {
-                Text = "Show Window"
-            };
-            showWindow.Click += (sender, e) =>
-            {
-                try
+                var showWindow = new ButtonMenuItem
                 {
-                    if (window.WindowState == WindowState.Minimized)
-                        window.WindowState = WindowState.Normal;
-                    if (!window.Visible)
-                        window.Show();
-                    window.BringToFront();
-                    window.Focus();
-                }
-                catch (Exception ex)
+                    Text = "Show Window"
+                };
+                showWindow.Click += (sender, e) =>
                 {
-                    Log.Exception(ex);
-                }
-            };
-
-            var close = new ButtonMenuItem
-            {
-                Text = "Close"
-            };
-            close.Click += (sender, e) => window.Close();
-
-            if (DesktopInterop.CurrentPlatform == PluginPlatform.MacOS)
-            {
-                // It's more idiomatic for macOS to include the name here
-                showWindow.Text = "Show OpenTabletDriver";
-
-                // Applications on macOS will keep running even after closing all their windows
-                // Offering a way to quit the app here is more idiomatic
-                close.Text = "Quit";
-                close.Click += (sender, e) => App.Exit();
-            }
-            else if (DesktopInterop.CurrentPlatform == PluginPlatform.Linux)
-            {
-                showWindow.Text = "Open OpenTabletDriver";
-
-                // On Linux, closing the window hides it to background to keep services (Floating HUD) active.
-                // Offering a Quit action allows exiting the background app cleanly.
-                close.Text = "Quit";
-                close.Click += (sender, e) => App.Exit();
-            }
-
-            var items = new List<MenuItem>();
-            var presets = AppInfo.PresetManager.GetPresets();
-
-            if (presets.Count != 0)
-            {
-                foreach (var preset in presets)
-                {
-                    var presetItem = new ButtonMenuItem
+                    try
                     {
-                        Text = preset.Name
-                    };
-                    presetItem.Click += MainForm.PresetButtonHandler;
-
-                    items.Add(presetItem);
-                }
-
-                items.Add(new SeparatorMenuItem());
-            }
-
-            items.Add(showWindow);
-
-            // macOS doesn't present a menu bar for agent apps
-            if (DesktopInterop.CurrentPlatform == PluginPlatform.MacOS && window.Menu != null)
-            {
-                items.Add(new SeparatorMenuItem());
-
-                var fileMenu = window.Menu.Items.GetSubmenu("&File") as ButtonMenuItem;
-                if (fileMenu != null)
-                {
-                    foreach (var item in fileMenu.Items)
-                    {
-                        if (item.Text == "Close" || item.Text == "Presets")
-                            continue;
-
-                        items.Add(CloneMenuItem(item));
+                        if (window.WindowState == WindowState.Minimized)
+                            window.WindowState = WindowState.Normal;
+                        if (!window.Visible)
+                            window.Show();
+                        window.BringToFront();
+                        window.Focus();
                     }
+                    catch (Exception ex)
+                    {
+                        Log.Exception(ex);
+                    }
+                };
+
+                var close = new ButtonMenuItem
+                {
+                    Text = "Close"
+                };
+                close.Click += (sender, e) => window.Close();
+
+                if (DesktopInterop.CurrentPlatform == PluginPlatform.MacOS)
+                {
+                    // It's more idiomatic for macOS to include the name here
+                    showWindow.Text = "Show OpenTabletDriver";
+
+                    // Applications on macOS will keep running even after closing all their windows
+                    // Offering a way to quit the app here is more idiomatic
+                    close.Text = "Quit";
+                    close.Click += (sender, e) => App.Exit();
+                }
+                else if (DesktopInterop.CurrentPlatform == PluginPlatform.Linux)
+                {
+                    showWindow.Text = "Open OpenTabletDriver";
+
+                    // On Linux, closing the window hides it to background to keep services (Floating HUD) active.
+                    // Offering a Quit action allows exiting the background app cleanly.
+                    close.Text = "Quit";
+                    close.Click += (sender, e) => App.Exit();
+                }
+
+                var items = new List<MenuItem>();
+                var presets = AppInfo.PresetManager.GetPresets();
+
+                if (presets.Count != 0)
+                {
+                    foreach (var preset in presets)
+                    {
+                        var presetItem = new ButtonMenuItem
+                        {
+                            Text = preset.Name
+                        };
+                        presetItem.Click += MainForm.PresetButtonHandler;
+
+                        items.Add(presetItem);
+                    }
+
                     items.Add(new SeparatorMenuItem());
                 }
 
-                var presetsMenu = window.Menu.Items.GetSubmenu("&Presets");
-                if (presetsMenu != null)
-                    items.Add(CloneMenuItem(presetsMenu));
+                items.Add(showWindow);
 
-                var profilesMenu = window.Menu.Items.GetSubmenu("P&rofiles");
-                if (profilesMenu != null)
-                    items.Add(CloneMenuItem(profilesMenu));
+                // macOS doesn't present a menu bar for agent apps
+                if (DesktopInterop.CurrentPlatform == PluginPlatform.MacOS && window.Menu != null)
+                {
+                    items.Add(new SeparatorMenuItem());
 
-                var tabletsMenu = window.Menu.Items.GetSubmenu("Tablets");
-                if (tabletsMenu != null)
-                    items.Add(CloneMenuItem(tabletsMenu));
+                    var fileMenu = window.Menu.Items.GetSubmenu("&File") as ButtonMenuItem;
+                    if (fileMenu != null)
+                    {
+                        foreach (var item in fileMenu.Items)
+                        {
+                            if (item.Text == "Close" || item.Text == "Presets")
+                                continue;
 
-                var pluginsMenu = window.Menu.Items.GetSubmenu("Plugins");
-                if (pluginsMenu != null)
-                    items.Add(CloneMenuItem(pluginsMenu));
+                            items.Add(CloneMenuItem(item));
+                        }
+                        items.Add(new SeparatorMenuItem());
+                    }
 
-                var helpMenu = window.Menu.Items.GetSubmenu("&Help");
-                if (helpMenu != null)
-                    items.Add(CloneMenuItem(helpMenu));
+                    var presetsMenu = window.Menu.Items.GetSubmenu("&Presets");
+                    if (presetsMenu != null)
+                        items.Add(CloneMenuItem(presetsMenu));
 
-                items.Add(new SeparatorMenuItem());
+                    var profilesMenu = window.Menu.Items.GetSubmenu("P&rofiles");
+                    if (profilesMenu != null)
+                        items.Add(CloneMenuItem(profilesMenu));
+
+                    var tabletsMenu = window.Menu.Items.GetSubmenu("Tablets");
+                    if (tabletsMenu != null)
+                        items.Add(CloneMenuItem(tabletsMenu));
+
+                    var pluginsMenu = window.Menu.Items.GetSubmenu("Plugins");
+                    if (pluginsMenu != null)
+                        items.Add(CloneMenuItem(pluginsMenu));
+
+                    var helpMenu = window.Menu.Items.GetSubmenu("&Help");
+                    if (helpMenu != null)
+                        items.Add(CloneMenuItem(helpMenu));
+
+                    items.Add(new SeparatorMenuItem());
+                }
+
+                items.Add(close);
+
+                // Safely update or assign the menu
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    try
+                    {
+                        Indicator.Menu = new ContextMenu(items);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Write("TrayIcon", $"Failed to update context menu: {ex.Message}", LogLevel.Debug);
+                    }
+                });
             }
-
-            items.Add(close);
-
-            Indicator.Menu = new ContextMenu(items);
+            catch (Exception ex)
+            {
+                Log.Write("TrayIcon", $"Failed to refresh tray menu items: {ex.Message}", LogLevel.Debug);
+            }
         }
     }
 }

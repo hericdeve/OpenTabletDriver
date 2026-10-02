@@ -24,10 +24,7 @@ namespace OpenTabletDriver.Desktop.Hud
 
         public PluginSettingStore? GetEffectiveBinding()
         {
-            if (Action != null && (Action.Type == HudActionType.WorkspaceLayer || IsSubLayer))
-                return null;
-
-            if (Binding != null && !Binding.Path.Contains("CompositorWorkspaceHudBinding"))
+            if (Binding != null)
                 return Binding;
 
             if (Action == null)
@@ -35,6 +32,10 @@ namespace OpenTabletDriver.Desktop.Hud
 
             return Action.Type switch
             {
+                HudActionType.WorkspaceLayer when string.IsNullOrWhiteSpace(Action.Value) =>
+                    new PluginSettingStore(new CompositorWorkspaceHudBinding()),
+                HudActionType.WorkspaceLayer when !string.IsNullOrWhiteSpace(Action.Value) =>
+                    new PluginSettingStore(new WorkspaceControlBinding { Target = Action.Value, Action = "Focus Workspace" }),
                 HudActionType.KeySequence when !string.IsNullOrWhiteSpace(Action.Value) =>
                     new PluginSettingStore(new MultiKeyBinding { Keys = Action.Value }),
                 HudActionType.DriverCommand when Action.Value == "DisplayToggle" =>

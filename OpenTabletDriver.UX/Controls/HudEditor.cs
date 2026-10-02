@@ -25,6 +25,9 @@ namespace OpenTabletDriver.UX.Controls
         private bool _isUpdating;
 
         private readonly DropDown _formFactorDropDown = new();
+        private readonly DropDown _themeStyleDropDown = new();
+        private readonly DropDown _fontFamilyDropDown = new();
+        private readonly TextBox _fontFamilyTextBox = new() { Width = 140, PlaceholderText = "Font family name" };
         private readonly FloatSlider _radiusSlider = new() { Minimum = 80, Maximum = 250, StepSize = 5 };
         private readonly FloatSlider _deadzoneSlider = new() { Minimum = 15, Maximum = 80, StepSize = 5 };
         private readonly FloatSlider _opacitySlider = new() { Minimum = 30, Maximum = 100, StepSize = 5 };
@@ -46,6 +49,45 @@ namespace OpenTabletDriver.UX.Controls
                 {
                     CurrentConfig.FormFactor = (HudFormFactor)ff;
                 }
+            };
+
+            // Theme Style options
+            _themeStyleDropDown.Items.Add(new ListItem { Text = "Translucent (Glass & Blur)", Key = "0" });
+            _themeStyleDropDown.Items.Add(new ListItem { Text = "Solid (Matte Dark)", Key = "1" });
+            _themeStyleDropDown.SelectedValueChanged += (s, e) =>
+            {
+                if (_isUpdating) return;
+                if (int.TryParse(_themeStyleDropDown.SelectedKey, out var ts))
+                {
+                    CurrentConfig.ThemeStyle = (HudThemeStyle)ts;
+                }
+            };
+
+            // Font options
+            _fontFamilyDropDown.Items.Add(new ListItem { Text = "Sans (System Default)", Key = "Sans" });
+            _fontFamilyDropDown.Items.Add(new ListItem { Text = "Inter", Key = "Inter" });
+            _fontFamilyDropDown.Items.Add(new ListItem { Text = "SF Pro Display", Key = "SF Pro Display" });
+            _fontFamilyDropDown.Items.Add(new ListItem { Text = "Segoe UI", Key = "Segoe UI" });
+            _fontFamilyDropDown.Items.Add(new ListItem { Text = "Roboto", Key = "Roboto" });
+            _fontFamilyDropDown.Items.Add(new ListItem { Text = "Cantarell", Key = "Cantarell" });
+            _fontFamilyDropDown.Items.Add(new ListItem { Text = "Fira Sans", Key = "Fira Sans" });
+            _fontFamilyDropDown.Items.Add(new ListItem { Text = "Custom...", Key = "Custom" });
+
+            _fontFamilyDropDown.SelectedValueChanged += (s, e) =>
+            {
+                if (_isUpdating) return;
+                var key = _fontFamilyDropDown.SelectedKey;
+                if (key != "Custom" && !string.IsNullOrEmpty(key))
+                {
+                    _fontFamilyTextBox.Text = key;
+                    CurrentConfig.FontFamily = key;
+                }
+            };
+
+            _fontFamilyTextBox.TextChanged += (s, e) =>
+            {
+                if (_isUpdating) return;
+                CurrentConfig.FontFamily = string.IsNullOrWhiteSpace(_fontFamilyTextBox.Text) ? "Sans" : _fontFamilyTextBox.Text.Trim();
             };
 
             // Slider handlers
@@ -94,6 +136,25 @@ namespace OpenTabletDriver.UX.Controls
                             Text = "Form Factor",
                             Orientation = Orientation.Horizontal,
                             Content = _formFactorDropDown
+                        },
+                        new Group
+                        {
+                            Text = "Theme Design Style",
+                            ToolTip = "Translucent enables optical glass, specular reflection, and compositor blur. Solid uses high-contrast matte dark styling.",
+                            Orientation = Orientation.Horizontal,
+                            Content = _themeStyleDropDown
+                        },
+                        new Group
+                        {
+                            Text = "HUD Font Family",
+                            ToolTip = "Font face used for radial slices and badges.",
+                            Orientation = Orientation.Horizontal,
+                            Content = new StackLayout
+                            {
+                                Orientation = Orientation.Horizontal,
+                                Spacing = 6,
+                                Items = { _fontFamilyDropDown, _fontFamilyTextBox }
+                            }
                         },
                         new Group
                         {
@@ -256,6 +317,22 @@ namespace OpenTabletDriver.UX.Controls
             try
             {
                 _formFactorDropDown.SelectedKey = ((int)config.FormFactor).ToString();
+                _themeStyleDropDown.SelectedKey = ((int)config.ThemeStyle).ToString();
+                _fontFamilyTextBox.Text = string.IsNullOrWhiteSpace(config.FontFamily) ? "Sans" : config.FontFamily;
+
+                bool foundFont = false;
+                foreach (var item in _fontFamilyDropDown.Items)
+                {
+                    if (item.Key == _fontFamilyTextBox.Text)
+                    {
+                        _fontFamilyDropDown.SelectedKey = item.Key;
+                        foundFont = true;
+                        break;
+                    }
+                }
+                if (!foundFont)
+                    _fontFamilyDropDown.SelectedKey = "Custom";
+
                 _radiusSlider.Value = config.Radius;
                 _deadzoneSlider.Value = config.DeadzoneRadius;
                 _opacitySlider.Value = (float)Math.Round(config.Opacity * 100f);

@@ -179,7 +179,28 @@ namespace OpenTabletDriver.Console
 
             var settings = await Driver.Instance.GetAppProfilerSettings();
 
-            settings.AppProfiles ??= new System.Collections.Generic.Dictionary<string, string>();
+            var existingRule = settings.Rules.FirstOrDefault(r =>
+                r.TargetType == Desktop.AppProfiler.RuleTargetType.WindowClass &&
+                string.Equals(r.Pattern, windowClass, StringComparison.OrdinalIgnoreCase));
+
+            if (existingRule != null)
+            {
+                existingRule.PresetName = preset.Name;
+            }
+            else
+            {
+                settings.Rules.Add(new Desktop.AppProfiler.AppProfileRule
+                {
+                    Name = windowClass,
+                    TargetType = Desktop.AppProfiler.RuleTargetType.WindowClass,
+                    MatchType = Desktop.AppProfiler.RuleMatchType.Exact,
+                    Pattern = windowClass,
+                    PresetName = preset.Name,
+                    DisplayMapping = settings.SyncFocus ? Desktop.AppProfiler.RuleDisplayMapping.FollowFocus : Desktop.AppProfiler.RuleDisplayMapping.Inherit
+                });
+            }
+
+            settings.AppProfiles ??= new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             settings.AppProfiles[windowClass] = preset.Name;
 
             await Driver.Instance.SetAppProfilerSettings(settings);
@@ -192,7 +213,14 @@ namespace OpenTabletDriver.Console
             if (!await EnsureDaemonReady()) return;
             var settings = await Driver.Instance.GetAppProfilerSettings();
 
-            if (settings.AppProfiles != null && settings.AppProfiles.Remove(windowClass))
+            int removed = settings.Rules.RemoveAll(r =>
+                r.TargetType == Desktop.AppProfiler.RuleTargetType.WindowClass &&
+                string.Equals(r.Pattern, windowClass, StringComparison.OrdinalIgnoreCase));
+
+            if (settings.AppProfiles != null)
+                settings.AppProfiles.Remove(windowClass);
+
+            if (removed > 0)
             {
                 await Driver.Instance.SetAppProfilerSettings(settings);
                 System.Console.WriteLine($"Removed application rule for '{windowClass}'.");
@@ -200,6 +228,31 @@ namespace OpenTabletDriver.Console
             else
             {
                 System.Console.WriteLine($"Rule for '{windowClass}' not found.");
+            }
+        }
+
+        private static async Task ListAppRules()
+        {
+            if (!await EnsureDaemonReady()) return;
+            var settings = await Driver.Instance.GetAppProfilerSettings();
+
+            System.Console.WriteLine($"Application Profiler: {(settings.EnableAppProfiler ? "Enabled" : "Disabled")}");
+            System.Console.WriteLine($"Default Profile: {settings.DefaultAppProfile ?? "(None)"}");
+            System.Console.WriteLine($"Default Output Mode: {settings.DefaultOutputMode ?? "(None)"}");
+            System.Console.WriteLine();
+            System.Console.WriteLine("Rules (in priority order):");
+            if (settings.Rules == null || settings.Rules.Count == 0)
+            {
+                System.Console.WriteLine("  No rules configured.");
+                return;
+            }
+
+            for (int i = 0; i < settings.Rules.Count; i++)
+            {
+                var r = settings.Rules[i];
+                var status = r.Enabled ? "[✓]" : "[ ]";
+                System.Console.WriteLine($"  {i + 1}. {status} \"{r.Name}\" ({r.TargetType} {r.MatchType}: \"{r.Pattern}\")");
+                System.Console.WriteLine($"     Preset: {r.PresetName ?? "—"} | Mode: {r.OutputMode ?? "—"} | Display: {r.DisplayMapping}");
             }
         }
 
