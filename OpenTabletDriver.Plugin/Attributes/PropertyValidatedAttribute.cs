@@ -23,15 +23,45 @@ namespace OpenTabletDriver.Plugin.Attributes
 
         public T? GetValue<T>(PropertyInfo property)
         {
-            var sourceType = property.ReflectedType;
-            var member = sourceType!.GetMember(MemberName).First();
+            var targetType = property.ReflectedType ?? property.DeclaringType;
+            MemberInfo? member = null;
+
+            for (var currentType = targetType; currentType != null; currentType = currentType.BaseType)
+            {
+                var members = currentType.GetMember(MemberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+                if (members.Length > 0)
+                {
+                    member = members[0];
+                    break;
+                }
+            }
+
+            if (member == null && property.DeclaringType != null && property.DeclaringType != targetType)
+            {
+                for (var currentType = property.DeclaringType; currentType != null; currentType = currentType.BaseType)
+                {
+                    var members = currentType.GetMember(MemberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+                    if (members.Length > 0)
+                    {
+                        member = members[0];
+                        break;
+                    }
+                }
+            }
+
+            if (member == null)
+            {
+                Log.Write("Plugin", $"Failed to find member '{MemberName}' on '{targetType?.FullName}' for validation", LogLevel.Error);
+                return default;
+            }
+
             try
             {
                 return member.MemberType switch
                 {
-                    MemberTypes.Property => (T?)sourceType.GetProperty(MemberName)!.GetValue(null),
-                    MemberTypes.Field => (T?)sourceType.GetField(MemberName)!.GetValue(null),
-                    MemberTypes.Method => (T?)sourceType.GetMethod(MemberName)!.Invoke(null, null),
+                    MemberTypes.Property => (T?)((PropertyInfo)member).GetValue(null),
+                    MemberTypes.Field => (T?)((FieldInfo)member).GetValue(null),
+                    MemberTypes.Method => (T?)((MethodInfo)member).Invoke(null, null),
                     _ => default
                 };
             }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using OpenTabletDriver.Desktop.Binding;
@@ -246,6 +247,48 @@ namespace OpenTabletDriver.Tests
             var friendly = store.ToString();
             Assert.Contains("Deep:", friendly);
             Assert.Contains("MockStateBinding", friendly);
+        }
+
+        [Fact]
+        public void TestNestedStorePreservesSettings()
+        {
+            var origStore = new PluginSettingStore(typeof(MockStateBinding));
+            origStore.Settings.Add(new PluginSetting("TestProp", "TestVal"));
+
+            var multi = new PluginSettingStore(typeof(MultiActionBinding));
+            multi[nameof(MultiActionBinding.TapAction)].SetValue(origStore);
+
+            var retrieved = multi.GetNestedStore(nameof(MultiActionBinding.TapAction));
+            Assert.NotNull(retrieved);
+            Assert.Equal(typeof(MockStateBinding).FullName, retrieved.Path);
+            Assert.Equal("TestVal", retrieved.Settings.FirstOrDefault(s => s.Property == "TestProp")?.Value?.ToString());
+        }
+
+        [Fact]
+        public void TestGetNestedStoreRoundtrip()
+        {
+            var tapStore = new PluginSettingStore(typeof(MockStateBinding));
+            var multi = new PluginSettingStore(typeof(MultiActionBinding));
+            multi[nameof(MultiActionBinding.TapAction)].SetValue(tapStore);
+
+            var retrieved = multi.GetNestedStore(nameof(MultiActionBinding.TapAction));
+            Assert.NotNull(retrieved);
+            Assert.Equal(typeof(MockStateBinding).FullName, retrieved.Path);
+        }
+
+        [Fact]
+        public void TestGetNestedStoreAfterJsonSerialization()
+        {
+            var tapStore = new PluginSettingStore(typeof(MockStateBinding));
+            var multi = new PluginSettingStore(typeof(MultiActionBinding));
+            multi[nameof(MultiActionBinding.TapAction)].SetValue(tapStore);
+
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(multi);
+            var deserialized = Newtonsoft.Json.JsonConvert.DeserializeObject<PluginSettingStore>(json);
+
+            Assert.NotNull(deserialized);
+            var retrieved = deserialized.GetNestedStore(nameof(MultiActionBinding.TapAction));
+            Assert.NotNull(retrieved);
         }
     }
 }

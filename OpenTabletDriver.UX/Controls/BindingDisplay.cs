@@ -11,13 +11,14 @@ namespace OpenTabletDriver.UX.Controls
 {
     public class BindingDisplay : Panel
     {
-        public BindingDisplay() : this(true)
+        public BindingDisplay() : this(true, false)
         {
         }
 
-        public BindingDisplay(bool allowSecondaryModes)
+        public BindingDisplay(bool allowSecondaryModes, bool allowDeepClick = false)
         {
             _allowCapabilities = allowSecondaryModes;
+            _allowDeepClick = allowDeepClick;
 
             _topRow = new StackLayout
             {
@@ -38,7 +39,9 @@ namespace OpenTabletDriver.UX.Controls
                             Text = "⚙",
                             Width = 32,
                             Visible = _allowCapabilities,
-                            ToolTip = "Configure button capabilities (Double-Click, Hold, Deep Click)"
+                            ToolTip = _allowDeepClick
+                                ? "Configure button capabilities (Double-Click, Hold, Deep Click)"
+                                : "Configure button capabilities (Double-Click, Hold)"
                         }
                     },
                     new StackLayoutItem
@@ -87,9 +90,12 @@ namespace OpenTabletDriver.UX.Controls
 
             _capabilitiesButton.Click += async (sender, e) =>
             {
-                var dialog = new BindingCapabilitiesDialog(Store);
+                var dialog = new BindingCapabilitiesDialog(Store, AllowDeepClick);
                 var updatedStore = await dialog.ShowModalAsync(this);
-                this.Store = updatedStore;
+                if (dialog.Applied)
+                {
+                    this.Store = updatedStore;
+                }
             };
 
             _advancedButton.Click += async (sender, e) =>
@@ -110,7 +116,7 @@ namespace OpenTabletDriver.UX.Controls
                     var hold = Store!.GetNestedStore("HoldAction");
                     var holdLift = Store!.GetNestedStore("HoldLiftAction");
                     var dbl = Store!.GetNestedStore("DoubleClickAction");
-                    var deep = Store!.GetNestedStore("DeepClickAction");
+                    var deep = _allowDeepClick ? Store!.GetNestedStore("DeepClickAction") : null;
                     bool hasCapabilities = hold != null || holdLift != null || dbl != null || deep != null;
                     var tap = Store!.GetNestedStore("TapAction");
 
@@ -142,6 +148,7 @@ namespace OpenTabletDriver.UX.Controls
 
         private bool _isUpdating;
         private bool _allowCapabilities = true;
+        private bool _allowDeepClick;
 
         public bool AllowSecondaryModes
         {
@@ -150,6 +157,16 @@ namespace OpenTabletDriver.UX.Controls
             {
                 _allowCapabilities = value;
                 _capabilitiesButton.Visible = value;
+            }
+        }
+
+        public bool AllowDeepClick
+        {
+            get => _allowDeepClick;
+            set
+            {
+                _allowDeepClick = value;
+                UpdateControlsFromStore();
             }
         }
 
@@ -197,18 +214,24 @@ namespace OpenTabletDriver.UX.Controls
                     bool hasActiveCapabilities = store!.GetNestedStore("HoldAction") != null ||
                                                  store!.GetNestedStore("HoldLiftAction") != null ||
                                                  store!.GetNestedStore("DoubleClickAction") != null ||
-                                                 store!.GetNestedStore("DeepClickAction") != null;
+                                                 (_allowDeepClick && store!.GetNestedStore("DeepClickAction") != null);
 
                     _capabilitiesButton.Text = hasActiveCapabilities ? "⚙*" : "⚙";
                     _capabilitiesButton.ToolTip = hasActiveCapabilities
-                        ? "Active capabilities (Hold / Lift / Double-Click / Deep Click). Click to configure."
-                        : "Configure button capabilities (Hold, Double-Click, Deep Click)";
+                        ? (_allowDeepClick
+                            ? "Active capabilities (Hold / Lift / Double-Click / Deep Click). Click to configure."
+                            : "Active capabilities (Hold / Lift / Double-Click). Click to configure.")
+                        : (_allowDeepClick
+                            ? "Configure button capabilities (Hold, Double-Click, Deep Click)"
+                            : "Configure button capabilities (Hold, Double-Click)");
                 }
                 else
                 {
                     _mainButton.Text = store != null ? store.GetHumanReadableString() : "Unassigned";
                     _capabilitiesButton.Text = "⚙";
-                    _capabilitiesButton.ToolTip = "Configure button capabilities (Hold, Double-Click, Deep Click)";
+                    _capabilitiesButton.ToolTip = _allowDeepClick
+                        ? "Configure button capabilities (Hold, Double-Click, Deep Click)"
+                        : "Configure button capabilities (Hold, Double-Click)";
                 }
             }
             finally
@@ -229,7 +252,7 @@ namespace OpenTabletDriver.UX.Controls
             var hold = Store!.GetNestedStore("HoldAction");
             var holdLift = Store!.GetNestedStore("HoldLiftAction");
             var dbl = Store!.GetNestedStore("DoubleClickAction");
-            var deep = Store!.GetNestedStore("DeepClickAction");
+            var deep = _allowDeepClick ? Store!.GetNestedStore("DeepClickAction") : null;
 
             if (hold == null && holdLift == null && dbl == null && deep == null)
             {

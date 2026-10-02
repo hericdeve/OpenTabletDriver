@@ -41,7 +41,7 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                         TitleVerticalAlignment = VerticalAlignment.Top,
                                         Orientation = Orientation.Horizontal,
                                         ExpandContent = true,
-                                        Content = scrollUp = new BindingDisplay()
+                                        Content = scrollUp = new BindingDisplay(allowSecondaryModes: false)
                                     },
                                     new Group
                                     {
@@ -50,7 +50,7 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                         TitleVerticalAlignment = VerticalAlignment.Top,
                                         Orientation = Orientation.Horizontal,
                                         ExpandContent = true,
-                                        Content = scrollDown = new BindingDisplay()
+                                        Content = scrollDown = new BindingDisplay(allowSecondaryModes: false)
                                     }
                                 }
                             }

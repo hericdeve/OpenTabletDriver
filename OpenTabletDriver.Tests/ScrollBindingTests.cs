@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using NSubstitute;
 using OpenTabletDriver.Desktop.Binding;
+using OpenTabletDriver.Plugin.Attributes;
 using OpenTabletDriver.Plugin.Platform.Pointer;
 using OpenTabletDriver.Plugin.Tablet;
 using OpenTabletDriver.Plugin.Timers;
@@ -167,6 +168,42 @@ namespace OpenTabletDriver.Tests
             // Release stops timer
             binding.Release(tablet, report);
             Assert.False(timer.Enabled);
+        }
+
+        [Fact]
+        public void ScrollUpAndDownBinding_Properties_DirectionAndInvertAreHidden()
+        {
+            var upDirectionProp = typeof(ScrollUpBinding).GetProperty(nameof(MouseScrollBinding.Direction));
+            var upInvertProp = typeof(ScrollUpBinding).GetProperty(nameof(MouseScrollBinding.Invert));
+
+            Assert.NotNull(upDirectionProp);
+            Assert.NotNull(upInvertProp);
+
+            Assert.True(upDirectionProp.GetCustomAttributes(typeof(PluginIgnoreAttribute), true).Any());
+            Assert.True(upInvertProp.GetCustomAttributes(typeof(PluginIgnoreAttribute), true).Any());
+        }
+
+        [Fact]
+        public void ScrollUpAndDownBinding_PropertyValidatedAttribute_ResolvesBaseClassValidDirections()
+        {
+            var baseProperty = typeof(MouseScrollBinding).GetProperty(nameof(MouseScrollBinding.Direction));
+            Assert.NotNull(baseProperty);
+            var validateAttr = baseProperty.GetCustomAttributes(typeof(Plugin.Attributes.PropertyValidatedAttribute), true)
+                .Cast<Plugin.Attributes.PropertyValidatedAttribute>()
+                .FirstOrDefault();
+            Assert.NotNull(validateAttr);
+
+            var directions = validateAttr.GetValue<IEnumerable<string>>(baseProperty);
+            Assert.NotNull(directions);
+            Assert.Contains("Up", directions);
+            Assert.Contains("Down", directions);
+
+            var upProperty = typeof(ScrollUpBinding).GetProperty(nameof(MouseScrollBinding.Direction));
+            Assert.NotNull(upProperty);
+            var upDirections = validateAttr.GetValue<IEnumerable<string>>(upProperty);
+            Assert.NotNull(upDirections);
+            Assert.Contains("Up", upDirections);
+            Assert.Contains("Down", upDirections);
         }
     }
 }

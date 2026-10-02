@@ -44,7 +44,7 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                         TitleVerticalAlignment = VerticalAlignment.Top,
                                         Orientation = Orientation.Horizontal,
                                         ExpandContent = true,
-                                        Content = clockwiseButton = new BindingDisplay()
+                                        Content = clockwiseButton = new BindingDisplay(allowSecondaryModes: false)
                                     },
                                     new UnitGroup
                                     {
@@ -78,7 +78,7 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                         TitleVerticalAlignment = VerticalAlignment.Top,
                                         ExpandContent = true,
                                         Orientation = Orientation.Horizontal,
-                                        Content = counterClockwiseButton = new BindingDisplay()
+                                        Content = counterClockwiseButton = new BindingDisplay(allowSecondaryModes: false)
                                     },
                                     new UnitGroup
                                     {

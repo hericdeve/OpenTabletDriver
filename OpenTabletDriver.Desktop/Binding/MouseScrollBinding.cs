@@ -10,7 +10,7 @@ using OpenTabletDriver.Plugin.Timers;
 
 namespace OpenTabletDriver.Desktop.Binding
 {
-    [PluginName(PLUGIN_NAME)]
+    [PluginName(PLUGIN_NAME), PluginIgnore]
     public class MouseScrollBinding : IStateBinding, IDisposable
     {
         private const string PLUGIN_NAME = "Mouse Scroll Binding";
@@ -59,7 +59,7 @@ namespace OpenTabletDriver.Desktop.Binding
         }
 
         [Property("Direction"), DefaultPropertyValue("Vertical"), PropertyValidated(nameof(ValidDirections))]
-        public string Direction
+        public virtual string Direction
         {
             get => _direction.ToString();
             set
@@ -76,7 +76,7 @@ namespace OpenTabletDriver.Desktop.Binding
         }
 
         [BooleanProperty("Invert", "Scroll Direction")]
-        public bool Invert
+        public virtual bool Invert
         {
             get;
             set;
@@ -256,7 +256,21 @@ namespace OpenTabletDriver.Desktop.Binding
     {
         public ScrollUpBinding()
         {
-            Direction = nameof(ScrollDirection.Up);
+            base.Direction = nameof(ScrollDirection.Up);
+        }
+
+        [PluginIgnore]
+        public override string Direction
+        {
+            get => base.Direction;
+            set => base.Direction = nameof(ScrollDirection.Up);
+        }
+
+        [PluginIgnore]
+        public override bool Invert
+        {
+            get => false;
+            set { }
         }
 
         public override string ToString() => $"Scroll Up ({Amount})";
@@ -267,7 +281,21 @@ namespace OpenTabletDriver.Desktop.Binding
     {
         public ScrollDownBinding()
         {
-            Direction = nameof(ScrollDirection.Down);
+            base.Direction = nameof(ScrollDirection.Down);
+        }
+
+        [PluginIgnore]
+        public override string Direction
+        {
+            get => base.Direction;
+            set => base.Direction = nameof(ScrollDirection.Down);
+        }
+
+        [PluginIgnore]
+        public override bool Invert
+        {
+            get => false;
+            set { }
         }
 
         public override string ToString() => $"Scroll Down ({Amount})";
@@ -278,7 +306,21 @@ namespace OpenTabletDriver.Desktop.Binding
     {
         public ScrollLeftBinding()
         {
-            Direction = nameof(ScrollDirection.Left);
+            base.Direction = nameof(ScrollDirection.Left);
+        }
+
+        [PluginIgnore]
+        public override string Direction
+        {
+            get => base.Direction;
+            set => base.Direction = nameof(ScrollDirection.Left);
+        }
+
+        [PluginIgnore]
+        public override bool Invert
+        {
+            get => false;
+            set { }
         }
 
         public override string ToString() => $"Scroll Left ({Amount})";
@@ -289,7 +331,21 @@ namespace OpenTabletDriver.Desktop.Binding
     {
         public ScrollRightBinding()
         {
-            Direction = nameof(ScrollDirection.Right);
+            base.Direction = nameof(ScrollDirection.Right);
+        }
+
+        [PluginIgnore]
+        public override string Direction
+        {
+            get => base.Direction;
+            set => base.Direction = nameof(ScrollDirection.Right);
+        }
+
+        [PluginIgnore]
+        public override bool Invert
+        {
+            get => false;
+            set { }
         }
 
         public override string ToString() => $"Scroll Right ({Amount})";

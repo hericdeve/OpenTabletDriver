@@ -45,7 +45,7 @@ namespace OpenTabletDriver.UX.Controls.Bindings
                                                         Orientation = Orientation.Horizontal,
                                                         ExpandContent = true,
                                                         ToolTip = "Configure primary tip action and optional capabilities (Double-Click, Hold, Deep Click via ⚙)",
-                                                        Content = tipButton = new BindingDisplay()
+                                                        Content = tipButton = new BindingDisplay(allowSecondaryModes: true, allowDeepClick: true)
                                                     },
                                                     new UnitGroup
                                                     {

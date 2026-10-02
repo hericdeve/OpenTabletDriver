@@ -89,7 +89,7 @@ namespace OpenTabletDriver.UX.Controls
         {
             var properties = from property in type.GetProperties()
                              let attrs = property.GetCustomAttributes(true)
-                             where attrs.Any(a => a is PropertyAttribute)
+                             where attrs.Any(a => a is PropertyAttribute) && !attrs.Any(a => a is PluginIgnoreAttribute)
                              select property;
 
             foreach (var property in properties)

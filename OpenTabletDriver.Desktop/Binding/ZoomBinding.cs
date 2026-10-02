@@ -9,7 +9,7 @@ using OpenTabletDriver.Plugin.Timers;
 
 namespace OpenTabletDriver.Desktop.Binding
 {
-    [PluginName("Zoom Binding")]
+    [PluginName("Zoom Binding"), PluginIgnore]
     public class ZoomBinding : IStateBinding, IDisposable
     {
         private ITimer? _timer;
@@ -47,7 +47,7 @@ namespace OpenTabletDriver.Desktop.Binding
         }
 
         [Property("Direction"), DefaultPropertyValue("In")]
-        public string Direction
+        public virtual string Direction
         {
             get => _direction.ToString();
             set
@@ -152,7 +152,14 @@ namespace OpenTabletDriver.Desktop.Binding
     {
         public ZoomInBinding()
         {
-            Direction = "In";
+            base.Direction = "In";
+        }
+
+        [PluginIgnore]
+        public override string Direction
+        {
+            get => base.Direction;
+            set => base.Direction = "In";
         }
     }
 
@@ -161,7 +168,14 @@ namespace OpenTabletDriver.Desktop.Binding
     {
         public ZoomOutBinding()
         {
-            Direction = "Out";
+            base.Direction = "Out";
+        }
+
+        [PluginIgnore]
+        public override string Direction
+        {
+            get => base.Direction;
+            set => base.Direction = "Out";
         }
     }
 }

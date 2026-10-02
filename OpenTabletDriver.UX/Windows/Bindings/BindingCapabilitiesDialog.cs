@@ -12,6 +12,8 @@ namespace OpenTabletDriver.UX.Windows.Bindings
 {
     public class BindingCapabilitiesDialog : Dialog<PluginSettingStore?>
     {
+        private readonly bool _allowDeepClick;
+
         private readonly CheckBox _doubleClickCheckBox;
         private readonly Panel _doubleClickContainer;
         private readonly BindingDisplay _doubleClickDisplay;
@@ -24,19 +26,21 @@ namespace OpenTabletDriver.UX.Windows.Bindings
         private readonly BindingDisplay _holdLiftDisplay;
         private readonly DropDown _liftTriggerDropDown;
 
-        private readonly CheckBox _deepClickCheckBox;
-        private readonly Panel _deepClickContainer;
-        private readonly BindingDisplay _deepClickDisplay;
-        private readonly FloatSlider _deepClickThresholdSlider;
-        private readonly FloatSlider _deepClickHoldDelaySlider;
-        private readonly CheckBox _deepClickSuppressStrokeCheckBox;
-        private readonly BindingDisplay _deepClickLiftDisplay;
+        private readonly CheckBox? _deepClickCheckBox;
+        private readonly Panel? _deepClickContainer;
+        private readonly BindingDisplay? _deepClickDisplay;
+        private readonly FloatSlider? _deepClickThresholdSlider;
+        private readonly FloatSlider? _deepClickHoldDelaySlider;
+        private readonly CheckBox? _deepClickSuppressStrokeCheckBox;
+        private readonly BindingDisplay? _deepClickLiftDisplay;
 
         private PluginSettingStore? _tapStore;
 
-        public BindingCapabilitiesDialog(PluginSettingStore? currentStore)
+        public BindingCapabilitiesDialog(PluginSettingStore? currentStore, bool allowDeepClick = false)
         {
-            Title = "Button Capabilities";
+            _allowDeepClick = allowDeepClick;
+            Title = allowDeepClick ? "Stylus Tip Capabilities" : "Button Capabilities";
+            Result = currentStore;
             Resizable = false;
             Padding = new Padding(12);
 
@@ -179,66 +183,98 @@ namespace OpenTabletDriver.UX.Windows.Bindings
             };
 
             // ── Deep Click Section ─────────────────────────────────────────────
-            _deepClickCheckBox = new CheckBox
+            if (_allowDeepClick)
             {
-                Text = "Enable Deep Click (Pressure / 3D Touch)",
-                Checked = deepStore != null
-            };
-            _deepClickDisplay = new BindingDisplay(allowSecondaryModes: false) { Store = deepStore };
-            _deepClickThresholdSlider = new FloatSlider
-            {
-                Minimum = 50,
-                Maximum = 98,
-                StepSize = 1,
-                Value = deepThreshold
-            };
-            _deepClickHoldDelaySlider = new FloatSlider
-            {
-                Minimum = 0,
-                Maximum = 300,
-                StepSize = 10,
-                Value = deepDelay
-            };
-            _deepClickSuppressStrokeCheckBox = new CheckBox
-            {
-                Text = "Suppress drawing stroke during deep click",
-                Checked = deepSuppress
-            };
-            _deepClickLiftDisplay = new BindingDisplay(allowSecondaryModes: false) { Store = deepLiftStore };
-
-            var deepClickContent = new StackLayout
-            {
-                Orientation = Orientation.Vertical,
-                Spacing = 6,
-                Padding = new Padding(16, 4, 4, 4),
-                Items =
+                _deepClickCheckBox = new CheckBox
                 {
-                    new TableLayout
+                    Text = "Enable Deep Click (Pressure / 3D Touch)",
+                    Checked = deepStore != null
+                };
+                _deepClickDisplay = new BindingDisplay(allowSecondaryModes: false) { Store = deepStore };
+                _deepClickThresholdSlider = new FloatSlider
+                {
+                    Minimum = 50,
+                    Maximum = 98,
+                    StepSize = 1,
+                    Value = deepThreshold
+                };
+                _deepClickHoldDelaySlider = new FloatSlider
+                {
+                    Minimum = 0,
+                    Maximum = 300,
+                    StepSize = 10,
+                    Value = deepDelay
+                };
+                _deepClickSuppressStrokeCheckBox = new CheckBox
+                {
+                    Text = "Suppress drawing stroke during deep click",
+                    Checked = deepSuppress
+                };
+                _deepClickLiftDisplay = new BindingDisplay(allowSecondaryModes: false) { Store = deepLiftStore };
+
+                var deepClickContent = new StackLayout
+                {
+                    Orientation = Orientation.Vertical,
+                    Spacing = 6,
+                    Padding = new Padding(16, 4, 4, 4),
+                    Items =
                     {
-                        Spacing = new Size(8, 4),
-                        Rows =
+                        new TableLayout
                         {
-                            new TableRow(new Label { Text = "Deep Click Action:", VerticalAlignment = VerticalAlignment.Center }, _deepClickDisplay),
-                            new TableRow(new Label { Text = "Activation Threshold (%):", VerticalAlignment = VerticalAlignment.Center }, _deepClickThresholdSlider),
-                            new TableRow(new Label { Text = "Hold Delay (ms):", VerticalAlignment = VerticalAlignment.Center }, _deepClickHoldDelaySlider),
-                            new TableRow(new Label { Text = "Stroke Suppression:", VerticalAlignment = VerticalAlignment.Center }, _deepClickSuppressStrokeCheckBox),
-                            new TableRow(new Label { Text = "On Lift Action (Optional):", VerticalAlignment = VerticalAlignment.Center }, _deepClickLiftDisplay)
+                            Spacing = new Size(8, 4),
+                            Rows =
+                            {
+                                new TableRow(new Label { Text = "Deep Click Action:", VerticalAlignment = VerticalAlignment.Center }, _deepClickDisplay),
+                                new TableRow(new Label { Text = "Activation Threshold (%):", VerticalAlignment = VerticalAlignment.Center }, _deepClickThresholdSlider),
+                                new TableRow(new Label { Text = "Hold Delay (ms):", VerticalAlignment = VerticalAlignment.Center }, _deepClickHoldDelaySlider),
+                                new TableRow(new Label { Text = "Stroke Suppression:", VerticalAlignment = VerticalAlignment.Center }, _deepClickSuppressStrokeCheckBox),
+                                new TableRow(new Label { Text = "On Lift Action (Optional):", VerticalAlignment = VerticalAlignment.Center }, _deepClickLiftDisplay)
+                            }
                         }
                     }
-                }
-            };
-            _deepClickContainer = new Panel { Content = deepClickContent, Visible = _deepClickCheckBox.Checked == true };
-            _deepClickCheckBox.CheckedChanged += (s, e) =>
-            {
-                _deepClickContainer.Visible = _deepClickCheckBox.Checked == true;
-            };
+                };
+                _deepClickContainer = new Panel { Content = deepClickContent, Visible = _deepClickCheckBox.Checked == true };
+                _deepClickCheckBox.CheckedChanged += (s, e) =>
+                {
+                    _deepClickContainer.Visible = _deepClickCheckBox.Checked == true;
+                };
+            }
 
             // ── Dialog Layout ──────────────────────────────────────────────────
             var applyButton = new Button { Text = "Apply" };
             applyButton.Click += (s, e) => Apply();
 
             var cancelButton = new Button { Text = "Cancel" };
-            cancelButton.Click += (s, e) => Close(currentStore);
+            cancelButton.Click += (s, e) =>
+            {
+                Applied = false;
+                Close(currentStore);
+            };
+
+            AbortButton = cancelButton;
+            DefaultButton = applyButton;
+
+            var capabilitiesStack = new StackLayout
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 10,
+                Padding = new Padding(8),
+                Items =
+                {
+                    _doubleClickCheckBox,
+                    _doubleClickContainer,
+                    CreateDivider(),
+                    _holdCheckBox,
+                    _holdContainer
+                }
+            };
+
+            if (_allowDeepClick && _deepClickCheckBox != null && _deepClickContainer != null)
+            {
+                capabilitiesStack.Items.Add(CreateDivider());
+                capabilitiesStack.Items.Add(_deepClickCheckBox);
+                capabilitiesStack.Items.Add(_deepClickContainer);
+            }
 
             Content = new StackLayout
             {
@@ -249,23 +285,7 @@ namespace OpenTabletDriver.UX.Windows.Bindings
                     new GroupBox
                     {
                         Text = "Capabilities",
-                        Content = new StackLayout
-                        {
-                            Orientation = Orientation.Vertical,
-                            Spacing = 10,
-                            Padding = new Padding(8),
-                            Items =
-                            {
-                                _doubleClickCheckBox,
-                                _doubleClickContainer,
-                                CreateDivider(),
-                                _holdCheckBox,
-                                _holdContainer,
-                                CreateDivider(),
-                                _deepClickCheckBox,
-                                _deepClickContainer
-                            }
-                        }
+                        Content = capabilitiesStack
                     },
                     new StackLayout
                     {
@@ -284,11 +304,14 @@ namespace OpenTabletDriver.UX.Windows.Bindings
 
         private static Panel CreateDivider() => new Panel { Height = 1, BackgroundColor = Colors.DarkGray };
 
+        public bool Applied { get; private set; }
+
         private void Apply()
         {
+            Applied = true;
             bool hasDbl = _doubleClickCheckBox.Checked == true && _doubleClickDisplay.Store != null;
             bool hasHold = _holdCheckBox.Checked == true && (_holdDisplay.Store != null || _holdLiftDisplay.Store != null);
-            bool hasDeep = _deepClickCheckBox.Checked == true && _deepClickDisplay.Store != null;
+            bool hasDeep = _allowDeepClick && _deepClickCheckBox?.Checked == true && _deepClickDisplay?.Store != null;
 
             if (!hasDbl && !hasHold && !hasDeep)
             {
@@ -319,10 +342,10 @@ namespace OpenTabletDriver.UX.Windows.Bindings
                 store[nameof(MultiActionBinding.LiftTrigger)].SetValue(_liftTriggerDropDown.SelectedValue?.ToString() ?? "Button Release");
             }
 
-            if (hasDeep)
+            if (hasDeep && _deepClickDisplay != null && _deepClickThresholdSlider != null && _deepClickHoldDelaySlider != null && _deepClickSuppressStrokeCheckBox != null)
             {
                 store[nameof(MultiActionBinding.DeepClickAction)].SetValue(_deepClickDisplay.Store);
-                if (_deepClickLiftDisplay.Store != null)
+                if (_deepClickLiftDisplay?.Store != null)
                     store[nameof(MultiActionBinding.DeepClickLiftAction)].SetValue(_deepClickLiftDisplay.Store);
 
                 store[nameof(MultiActionBinding.DeepClickThreshold)].SetValue(_deepClickThresholdSlider.Value);

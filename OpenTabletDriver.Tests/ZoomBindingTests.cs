@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using NSubstitute;
 using OpenTabletDriver.Desktop.Binding;
+using OpenTabletDriver.Plugin.Attributes;
 using OpenTabletDriver.Plugin.Platform.Keyboard;
 using OpenTabletDriver.Plugin.Platform.Pointer;
 using OpenTabletDriver.Plugin.Tablet;
@@ -74,6 +76,19 @@ namespace OpenTabletDriver.Tests
             keyboard.Received(1).Press("Equal");
             keyboard.Received(1).Release("Equal");
             keyboard.Received(1).Release("Control");
+        }
+
+        [Fact]
+        public void ZoomInAndOutBinding_DirectionProperty_IsHidden()
+        {
+            var zoomInDir = typeof(ZoomInBinding).GetProperty(nameof(ZoomBinding.Direction));
+            var zoomOutDir = typeof(ZoomOutBinding).GetProperty(nameof(ZoomBinding.Direction));
+
+            Assert.NotNull(zoomInDir);
+            Assert.NotNull(zoomOutDir);
+
+            Assert.True(zoomInDir.GetCustomAttributes(typeof(PluginIgnoreAttribute), true).Any());
+            Assert.True(zoomOutDir.GetCustomAttributes(typeof(PluginIgnoreAttribute), true).Any());
         }
 
         [Fact]
