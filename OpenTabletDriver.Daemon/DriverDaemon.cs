@@ -43,6 +43,9 @@ namespace OpenTabletDriver.Daemon
         public HudConfiguration? ActiveHudConfig { get; private set; }
         public int CurrentHoveredSlice { get; private set; } = -1;
 
+        private System.Threading.Timer? _hudSubLayerTimer;
+        private HudConfiguration? _rootHudConfig;
+
         public DriverDaemon(Driver driver)
         {
             ActiveInstance = this;
@@ -846,6 +849,10 @@ namespace OpenTabletDriver.Daemon
         {
             lock (_hudLock)
             {
+                _hudSubLayerTimer?.Dispose();
+                _hudSubLayerTimer = null;
+                _rootHudConfig = null;
+
                 IsHudActive = true;
                 ActiveHudConfig = Settings?.Hud ?? request.Configuration ?? HudConfiguration.GetDefaults();
                 HudAnchorPosition = request.CursorPosition;
@@ -878,6 +885,7 @@ namespace OpenTabletDriver.Daemon
                 {
                     CurrentHoveredSlice = hovered;
                     changed = true;
+                    OnHoveredSliceChanged(CurrentHoveredSlice);
                 }
 
                 request.HoveredSlice = CurrentHoveredSlice;
@@ -886,6 +894,169 @@ namespace OpenTabletDriver.Daemon
             if (changed)
             {
                 UpdateHudRequested?.Invoke(this, request);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private void OnHoveredSliceChanged(int hoveredSlice)
+        {
+            _hudSubLayerTimer?.Dispose();
+            _hudSubLayerTimer = null;
+
+            if (!IsHudActive || ActiveHudConfig == null)
+                return;
+
+            int delay = ActiveHudConfig.SubMenuHoverDelayMs > 0 ? ActiveHudConfig.SubMenuHoverDelayMs : 250;
+
+            if (hoveredSlice >= 0 && hoveredSlice < ActiveHudConfig.Items.Count)
+            {
+                var item = ActiveHudConfig.Items[hoveredSlice];
+                if (item.IsSubLayer)
+                {
+                    int targetSlice = hoveredSlice;
+                    _hudSubLayerTimer = new System.Threading.Timer(async _ =>
+                    {
+                        await HandleSubLayerHoverTimeout(targetSlice);
+                    }, null, delay, System.Threading.Timeout.Infinite);
+                }
+            }
+            else if (_rootHudConfig != null && hoveredSlice == -1)
+            {
+                // Hovered back to center deadzone while in sub-layer:
+                // After delay, return to root menu
+                _hudSubLayerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await RestoreRootHudLayer();
+                }, null, delay + 50, System.Threading.Timeout.Infinite);
+            }
+        }
+
+        private async Task HandleSubLayerHoverTimeout(int targetSlice)
+        {
+            HudItem? item = null;
+            lock (_hudLock)
+            {
+                if (!IsHudActive || ActiveHudConfig == null || CurrentHoveredSlice != targetSlice)
+                    return;
+
+                if (targetSlice >= 0 && targetSlice < ActiveHudConfig.Items.Count)
+                    item = ActiveHudConfig.Items[targetSlice];
+            }
+
+            if (item == null || !item.IsSubLayer)
+                return;
+
+            if (item.Action?.Type == HudActionType.WorkspaceLayer || item.Binding?.Path?.Contains("CompositorWorkspaceHudBinding") == true)
+            {
+                await SwitchToWorkspaceSubLayer();
+            }
+        }
+
+        public async Task SwitchToWorkspaceSubLayer()
+        {
+            try
+            {
+                var workspaces = await GetCompositorWorkspaces();
+
+                lock (_hudLock)
+                {
+                    if (!IsHudActive || ActiveHudConfig == null)
+                        return;
+
+                    _rootHudConfig ??= ActiveHudConfig;
+                    var wsConfig = new HudConfiguration
+                    {
+                        FormFactor = _rootHudConfig.FormFactor,
+                        Radius = _rootHudConfig.Radius,
+                        DeadzoneRadius = _rootHudConfig.DeadzoneRadius,
+                        Opacity = _rootHudConfig.Opacity,
+                        KeepCursorAnchored = _rootHudConfig.KeepCursorAnchored,
+                        SubMenuHoverDelayMs = _rootHudConfig.SubMenuHoverDelayMs,
+                        IsSubMenu = true,
+                        Items = new List<HudItem>()
+                    };
+
+                    int maxSlots = Settings?.CompositorSettings?.MaxHudWorkspaceSlots ?? 8;
+                    var displayWorkspaces = workspaces.Take(maxSlots).ToList();
+
+                    foreach (var ws in displayWorkspaces)
+                    {
+                        var label = string.IsNullOrWhiteSpace(ws.LastWindowTitle)
+                            ? $"WS {ws.Name}"
+                            : $"[{ws.Name}] {ws.LastWindowTitle}";
+
+                        if (label.Length > 16)
+                            label = label.Substring(0, 14) + "..";
+
+                        if (ws.IsActive)
+                            label = "✓ " + label;
+
+                        wsConfig.Items.Add(new HudItem
+                        {
+                            Label = label,
+                            Action = new HudAction
+                            {
+                                Type = HudActionType.WorkspaceLayer,
+                                Value = ws.Id
+                            }
+                        });
+                    }
+
+                    if (wsConfig.Items.Count == 0)
+                    {
+                        for (int i = 1; i <= 5; i++)
+                        {
+                            wsConfig.Items.Add(new HudItem
+                            {
+                                Label = $"WS {i}",
+                                Action = new HudAction
+                                {
+                                    Type = HudActionType.WorkspaceLayer,
+                                    Value = i.ToString()
+                                }
+                            });
+                        }
+                    }
+
+                    ActiveHudConfig = wsConfig;
+                    CurrentHoveredSlice = -1;
+                }
+
+                if (HudAnchorPosition.HasValue)
+                {
+                    ShowHudRequested?.Invoke(this, new HudShowRequest
+                    {
+                        CursorPosition = HudAnchorPosition.Value,
+                        Configuration = ActiveHudConfig
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex);
+            }
+        }
+
+        public Task RestoreRootHudLayer()
+        {
+            lock (_hudLock)
+            {
+                if (!IsHudActive || _rootHudConfig == null)
+                    return Task.CompletedTask;
+
+                ActiveHudConfig = _rootHudConfig;
+                _rootHudConfig = null;
+                CurrentHoveredSlice = -1;
+            }
+
+            if (HudAnchorPosition.HasValue)
+            {
+                ShowHudRequested?.Invoke(this, new HudShowRequest
+                {
+                    CursorPosition = HudAnchorPosition.Value,
+                    Configuration = ActiveHudConfig
+                });
             }
 
             return Task.CompletedTask;
@@ -926,13 +1097,16 @@ namespace OpenTabletDriver.Daemon
 
         public Task ConfirmHudSelection(Vector2? finalPosition = null)
         {
+            _hudSubLayerTimer?.Dispose();
+            _hudSubLayerTimer = null;
+
             HudItem? itemToExecute = null;
+            bool keepOpenForSubLayer = false;
+
             lock (_hudLock)
             {
                 if (!IsHudActive)
                     return Task.CompletedTask;
-
-                IsHudActive = false;
 
                 // If a final position was provided, calculate the definitive slice at release time
                 if (finalPosition.HasValue && ActiveHudConfig != null && HudAnchorPosition.HasValue)
@@ -945,9 +1119,27 @@ namespace OpenTabletDriver.Daemon
                     itemToExecute = ActiveHudConfig.Items[CurrentHoveredSlice];
                 }
 
-                CurrentHoveredSlice = -1;
-                HudAnchorPosition = null;
-                HudCurrentPosition = null;
+                if (itemToExecute != null && itemToExecute.IsSubLayer)
+                {
+                    keepOpenForSubLayer = true;
+                }
+                else
+                {
+                    IsHudActive = false;
+                    _rootHudConfig = null;
+                    CurrentHoveredSlice = -1;
+                    HudAnchorPosition = null;
+                    HudCurrentPosition = null;
+                }
+            }
+
+            if (keepOpenForSubLayer)
+            {
+                _ = Task.Run(async () =>
+                {
+                    await SwitchToWorkspaceSubLayer();
+                });
+                return Task.CompletedTask;
             }
 
             DismissHudRequested?.Invoke(this, EventArgs.Empty);
@@ -977,6 +1169,10 @@ namespace OpenTabletDriver.Daemon
                 if (!IsHudActive)
                     return Task.CompletedTask;
 
+                _hudSubLayerTimer?.Dispose();
+                _hudSubLayerTimer = null;
+                _rootHudConfig = null;
+
                 IsHudActive = false;
                 HudAnchorPosition = null;
                 HudCurrentPosition = null;
@@ -1002,6 +1198,36 @@ namespace OpenTabletDriver.Daemon
             {
                 await ExecuteHudAction(item.Action);
             }
+        }
+
+        public Task<IReadOnlyList<OpenTabletDriver.Desktop.Compositor.WorkspaceInfo>> GetCompositorWorkspaces()
+        {
+            var provider = OpenTabletDriver.Desktop.Compositor.CompositorManager.GetActiveProvider(Settings?.CompositorSettings?.CompositorType);
+            return provider.GetWorkspacesAsync();
+        }
+
+        public Task<bool> FocusCompositorWorkspace(string workspaceId)
+        {
+            var provider = OpenTabletDriver.Desktop.Compositor.CompositorManager.GetActiveProvider(Settings?.CompositorSettings?.CompositorType);
+            return provider.FocusWorkspaceAsync(workspaceId);
+        }
+
+        public Task<bool> MoveWindowToCompositorWorkspace(string workspaceId, bool followFocus = true)
+        {
+            var provider = OpenTabletDriver.Desktop.Compositor.CompositorManager.GetActiveProvider(Settings?.CompositorSettings?.CompositorType);
+            return provider.MoveWindowToWorkspaceAsync(workspaceId, followFocus);
+        }
+
+        public Task<bool> FocusCompositorWindow(OpenTabletDriver.Desktop.Compositor.WindowDirection direction)
+        {
+            var provider = OpenTabletDriver.Desktop.Compositor.CompositorManager.GetActiveProvider(Settings?.CompositorSettings?.CompositorType);
+            return provider.FocusWindowAsync(direction);
+        }
+
+        public Task<bool> MoveCompositorWindow(OpenTabletDriver.Desktop.Compositor.WindowDirection direction)
+        {
+            var provider = OpenTabletDriver.Desktop.Compositor.CompositorManager.GetActiveProvider(Settings?.CompositorSettings?.CompositorType);
+            return provider.MoveWindowAsync(direction);
         }
 
         public async Task ExecuteBinding(PluginSettingStore store)
@@ -1094,6 +1320,12 @@ namespace OpenTabletDriver.Daemon
                             }
                         }
                         break;
+                    case HudActionType.WorkspaceLayer when !string.IsNullOrWhiteSpace(action.Value):
+                        await FocusCompositorWorkspace(action.Value);
+                        break;
+                    case HudActionType.WorkspaceLayer when string.IsNullOrWhiteSpace(action.Value):
+                        await SwitchToWorkspaceSubLayer();
+                        break;
                 }
             }
             catch (Exception ex)
@@ -1117,6 +1349,9 @@ namespace OpenTabletDriver.Daemon
                     break;
                 case "DisplayToggle":
                     CycleDisplay();
+                    break;
+                case "Workspace" when !string.IsNullOrWhiteSpace(secondaryValue):
+                    await FocusCompositorWorkspace(secondaryValue);
                     break;
                 case "PrecisionMode":
                     await TogglePrecisionMode();

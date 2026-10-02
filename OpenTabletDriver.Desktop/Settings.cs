@@ -16,6 +16,7 @@ namespace OpenTabletDriver.Desktop
         private PluginSettingStoreCollection tools = new PluginSettingStoreCollection();
         private OpenTabletDriver.Desktop.Hud.HudConfiguration? hud;
         private OpenTabletDriver.Desktop.Tools.ContextualToolsConfiguration? contextualTools;
+        private OpenTabletDriver.Desktop.Compositor.CompositorSettings? compositorSettings;
         private string revision = GetVersion();
 
         [JsonProperty(nameof(Revision))]
@@ -74,6 +75,13 @@ namespace OpenTabletDriver.Desktop
             }
         }
 
+        [JsonProperty(nameof(CompositorSettings))]
+        public OpenTabletDriver.Desktop.Compositor.CompositorSettings CompositorSettings
+        {
+            set => RaiseAndSetIfChanged(ref this.compositorSettings, value);
+            get => this.compositorSettings ??= new OpenTabletDriver.Desktop.Compositor.CompositorSettings();
+        }
+
         public static Settings GetDefaults()
         {
             return new Settings
@@ -82,7 +90,8 @@ namespace OpenTabletDriver.Desktop
                 LockUsableAreaDisplay = true,
                 LockUsableAreaTablet = true,
                 Hud = OpenTabletDriver.Desktop.Hud.HudConfiguration.GetDefaults(),
-                ContextualTools = OpenTabletDriver.Desktop.Tools.ContextualToolsConfiguration.GetDefaults()
+                ContextualTools = OpenTabletDriver.Desktop.Tools.ContextualToolsConfiguration.GetDefaults(),
+                CompositorSettings = new OpenTabletDriver.Desktop.Compositor.CompositorSettings()
             };
         }
 

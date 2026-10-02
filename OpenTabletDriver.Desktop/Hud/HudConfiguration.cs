@@ -16,6 +16,8 @@ namespace OpenTabletDriver.Desktop.Hud
         public bool Pinned { get; set; } = false;
         public float Opacity { get; set; } = 0.95f;
         public bool KeepCursorAnchored { get; set; } = true;
+        public bool IsSubMenu { get; set; } = false;
+        public int SubMenuHoverDelayMs { get; set; } = 250;
 
         public static HudConfiguration GetDefaults()
         {

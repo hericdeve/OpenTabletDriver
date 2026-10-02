@@ -43,6 +43,12 @@ namespace OpenTabletDriver.UX.Controls
 
             control.Pages.Add(new TabPage
             {
+                Text = "OS",
+                Content = osSettingsEditor = new()
+            });
+
+            control.Pages.Add(new TabPage
+            {
                 Text = "Filters",
                 Padding = 5,
                 Content = filterEditor = new()
@@ -130,6 +136,7 @@ namespace OpenTabletDriver.UX.Controls
         private HudEditor hudEditor;
         private ContextualToolEditor contextualToolEditor;
         private AppProfileEditor appProfileEditor;
+        private OsSettingsEditor osSettingsEditor;
         private BindingEditor penBindingEditor, auxBindingEditor, mouseBindingEditor;
         private List<BindingEditor> wheelBindingEditors = [];
         private PluginSettingStoreCollectionEditor<IPositionedPipelineElement<IDeviceReport>> filterEditor;
@@ -170,6 +177,7 @@ namespace OpenTabletDriver.UX.Controls
                 SetPageVisibility(hudEditor, true);
                 SetPageVisibility(contextualToolEditor, true);
                 SetPageVisibility(appProfileEditor, true);
+                SetPageVisibility(osSettingsEditor, true);
                 SetPageVisibility(filterEditor, true);
                 SetPageVisibility(penBindingEditor, true);
                 SetPageVisibility(auxBindingEditor, tablet.Properties.Specifications.AuxiliaryButtons != null);
@@ -190,6 +198,7 @@ namespace OpenTabletDriver.UX.Controls
                 SetPageVisibility(hudEditor, false);
                 SetPageVisibility(contextualToolEditor, false);
                 SetPageVisibility(appProfileEditor, false);
+                SetPageVisibility(osSettingsEditor, false);
                 SetPageVisibility(filterEditor, false);
                 SetPageVisibility(penBindingEditor, false);
                 SetPageVisibility(auxBindingEditor, false);

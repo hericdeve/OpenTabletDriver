@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using Cairo;
 using Gdk;
@@ -13,6 +14,8 @@ namespace OpenTabletDriver.UX.Gtk.Hud
     public class RadialMenuOverlay : GtkWindow
     {
         private HudConfiguration _config;
+        private HudConfiguration? _rootConfig;
+        public bool IsInWorkspaceSubMenu => _rootConfig != null;
         private Vector2 _anchorPos;
         private Vector2 _currentPos;
         private Vector2 _monitorOrigin = Vector2.Zero;
@@ -57,6 +60,16 @@ namespace OpenTabletDriver.UX.Gtk.Hud
             _config = config;
             if (_config.Items == null || _config.Items.Count == 0)
                 _config = HudConfiguration.GetDefaults();
+
+            // Track root configuration if entering a sub-menu
+            if (_config.IsSubMenu)
+            {
+                _rootConfig ??= _config;
+            }
+            else
+            {
+                _rootConfig = null;
+            }
 
             // Deduplicate items if corrupted settings file had repeated items
             var seen = new System.Collections.Generic.HashSet<string>();
@@ -128,8 +141,19 @@ namespace OpenTabletDriver.UX.Gtk.Hud
             }
         }
 
+        public void SwitchToWorkspaceLayer()
+        {
+            _ = App.Driver.Instance?.SwitchToWorkspaceSubLayer();
+        }
+
+        public void RestoreRootMenu()
+        {
+            _ = App.Driver.Instance?.RestoreRootHudLayer();
+        }
+
         public void Dismiss()
         {
+            _rootConfig = null;
             Hide();
         }
 
@@ -216,10 +240,11 @@ namespace OpenTabletDriver.UX.Gtk.Hud
             // Center Cancel / Pin Icon
             cr.SelectFontFace("Sans", FontSlant.Normal, FontWeight.Normal);
             cr.SetFontSize(14);
-            var centerExt = cr.TextExtents("X");
+            string centerText = IsInWorkspaceSubMenu ? "◄" : "X";
+            var centerExt = cr.TextExtents(centerText);
             cr.MoveTo(centerX - (centerExt.Width / 2.0) - centerExt.XBearing, centerY - (centerExt.Height / 2.0) - centerExt.YBearing);
             cr.SetSourceRGBA(0.6, 0.6, 0.65, 0.8);
-            cr.ShowText("X");
+            cr.ShowText(centerText);
         }
 
         [GLib.ConnectBefore]
@@ -227,24 +252,42 @@ namespace OpenTabletDriver.UX.Gtk.Hud
         {
             if (args.Event.Button == 1) // Left Click
             {
-                // In full-screen layer-shell, clicking outside the menu dismisses the HUD
+                double clickDist = 0;
                 if (_isLayerShellActive)
                 {
                     double dx = args.Event.X - _anchorPos.X;
                     double dy = args.Event.Y - _anchorPos.Y;
-                    double dist = Math.Sqrt(dx * dx + dy * dy);
-                    if (dist > _config.Radius + 20)
+                    clickDist = Math.Sqrt(dx * dx + dy * dy);
+                    if (clickDist > _config.Radius + 20)
                     {
                         Dismiss();
                         return;
                     }
                 }
+                else
+                {
+                    double dx = args.Event.X - Allocation.Width / 2.0;
+                    double dy = args.Event.Y - Allocation.Height / 2.0;
+                    clickDist = Math.Sqrt(dx * dx + dy * dy);
+                }
 
                 if (_hoveredSlice >= 0 && _hoveredSlice < _config.Items.Count)
                 {
                     var item = _config.Items[_hoveredSlice];
+                    if (item.Action?.Type == HudActionType.WorkspaceLayer && string.IsNullOrWhiteSpace(item.Action?.Value))
+                    {
+                        // Expand into workspace layer
+                        SwitchToWorkspaceLayer();
+                        return;
+                    }
+
                     Dismiss();
                     ItemActivated?.Invoke(item);
+                }
+                else if (IsInWorkspaceSubMenu && clickDist <= _config.DeadzoneRadius)
+                {
+                    // Center clicked in sub-layer: back to root menu
+                    RestoreRootMenu();
                 }
                 else
                 {

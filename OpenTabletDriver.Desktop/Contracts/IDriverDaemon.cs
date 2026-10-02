@@ -60,6 +60,13 @@ namespace OpenTabletDriver.Desktop.Contracts
         Task TriggerHudUpdate(HudUpdateRequest request);
         Task TriggerHudDismiss();
         Task ConfirmHudSelection(Vector2? finalPosition = null);
+        Task<IReadOnlyList<Compositor.WorkspaceInfo>> GetCompositorWorkspaces();
+        Task SwitchToWorkspaceSubLayer();
+        Task RestoreRootHudLayer();
+        Task<bool> FocusCompositorWorkspace(string workspaceId);
+        Task<bool> MoveWindowToCompositorWorkspace(string workspaceId, bool followFocus = true);
+        Task<bool> FocusCompositorWindow(Compositor.WindowDirection direction);
+        Task<bool> MoveCompositorWindow(Compositor.WindowDirection direction);
         Task ExecuteHudAction(HudAction action);
         Task ExecuteHudItem(HudItem item);
         Task ExecuteBinding(PluginSettingStore store);

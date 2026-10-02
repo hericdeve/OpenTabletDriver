@@ -17,9 +17,17 @@ namespace OpenTabletDriver.Desktop.Hud
         [JsonProperty("Binding")]
         public PluginSettingStore? Binding { get; set; }
 
+        [JsonIgnore]
+        public bool IsSubLayer =>
+            (Action?.Type == HudActionType.WorkspaceLayer && string.IsNullOrWhiteSpace(Action?.Value))
+            || (Binding?.Path?.Contains("CompositorWorkspaceHudBinding") == true && string.IsNullOrWhiteSpace(Action?.Value));
+
         public PluginSettingStore? GetEffectiveBinding()
         {
-            if (Binding != null)
+            if (Action != null && (Action.Type == HudActionType.WorkspaceLayer || IsSubLayer))
+                return null;
+
+            if (Binding != null && !Binding.Path.Contains("CompositorWorkspaceHudBinding"))
                 return Binding;
 
             if (Action == null)
@@ -83,6 +91,14 @@ namespace OpenTabletDriver.Desktop.Hud
                 {
                     Type = HudActionType.DriverCommand,
                     Value = "DisplayToggle"
+                };
+            }
+            else if (Binding.Path == typeof(CompositorWorkspaceHudBinding).FullName || Binding.Path?.Contains("CompositorWorkspaceHudBinding") == true)
+            {
+                Action = new HudAction
+                {
+                    Type = HudActionType.WorkspaceLayer,
+                    Value = null
                 };
             }
             else if (Binding.Path == typeof(PresetBinding).FullName)

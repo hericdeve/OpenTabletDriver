@@ -14,6 +14,7 @@ namespace OpenTabletDriver.Desktop.Hud
                 HudActionType.DriverCommand => $"Command: {Value} ({SecondaryValue})",
                 HudActionType.MouseClick => $"Mouse: {Value}",
                 HudActionType.ShellCommand => $"Shell: {Value}",
+                HudActionType.WorkspaceLayer => "Compositor Workspaces",
                 _ => "None"
             };
         }

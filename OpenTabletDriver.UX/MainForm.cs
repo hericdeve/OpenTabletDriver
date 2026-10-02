@@ -306,6 +306,9 @@ namespace OpenTabletDriver.UX
             var openAppProfilesTab = new Command { MenuText = "App Profiling Configuration..." };
             openAppProfilesTab.Executed += (sender, e) => App.SelectTab("App Profiles");
 
+            var openOsTab = new Command { MenuText = "OS & Compositor Settings..." };
+            openOsTab.Executed += (sender, e) => App.SelectTab("OS");
+
             var saveAppPreset = new Command { MenuText = "Map current preset to app..." };
             saveAppPreset.Executed += async (sender, e) => await SaveAppPresetDialog();
 
@@ -433,6 +436,7 @@ namespace OpenTabletDriver.UX
                         Items =
                         {
                             openAppProfilesTab,
+                            openOsTab,
                             new SeparatorMenuItem(),
                             toggleAppPresets,
                             toggleSyncFocus,
