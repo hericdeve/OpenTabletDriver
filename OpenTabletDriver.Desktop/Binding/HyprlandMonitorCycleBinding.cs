@@ -12,6 +12,7 @@ using OpenTabletDriver.Plugin.DependencyInjection;
 using OpenTabletDriver.Plugin.Platform.Display;
 using OpenTabletDriver.Plugin.Tablet;
 using OpenTabletDriver.Plugin.Timing;
+using OpenTabletDriver.Desktop.Interop;
 using OpenTabletDriver.Desktop.Interop.Display;
 
 #nullable enable
@@ -80,6 +81,13 @@ namespace OpenTabletDriver.Desktop.Binding
                 var currentIndex = HyprlandDisplayInterop.FindCurrentMonitorIndex(monitors, display);
                 var nextIndex = GetNextIndex(currentIndex, monitors.Length);
                 var nextMonitor = monitors[nextIndex];
+
+                // If next monitor extends beyond current VirtualScreen bounds, reset screen and pointers
+                var currentScreen = VirtualScreen ?? DesktopInterop.VirtualScreen;
+                if (currentScreen != null && (nextMonitor.X + nextMonitor.Width > currentScreen.Width + 1 || nextMonitor.Y + nextMonitor.Height > currentScreen.Height + 1))
+                {
+                    DesktopInterop.ResetVirtualScreenAndPointers();
+                }
 
                 profile.AbsoluteModeSettings.Display = HyprlandDisplayInterop.ToAreaSettings(nextMonitor);
                 Daemon.SetSettings(settings).GetAwaiter().GetResult();

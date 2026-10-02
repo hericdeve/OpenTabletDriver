@@ -28,23 +28,31 @@ namespace OpenTabletDriver.Desktop.Interop.Display
         public static MonitorArea? GetActiveMonitor(IVirtualScreen? virtualScreen)
         {
             var monitors = GetMonitors(virtualScreen);
-            var activeWindowOutput = RunHyprctl("activewindow");
-            if (string.IsNullOrWhiteSpace(activeWindowOutput))
+            if (monitors.Length == 0)
                 return null;
-            
-            try
+
+            var activeWindowOutput = RunHyprctl("activewindow");
+            if (!string.IsNullOrWhiteSpace(activeWindowOutput))
             {
-                var activeWindow = JObject.Parse(activeWindowOutput);
-                var monitorId = activeWindow.Value<int?>("monitor");
-                if (monitorId != null)
-                    return monitors.FirstOrDefault(m => m.Id == monitorId.Value);
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.Write(PLUGIN_NAME, $"Failed to parse activewindow: {ex.Message}", Plugin.LogLevel.Debug);
+                try
+                {
+                    var activeWindow = JObject.Parse(activeWindowOutput);
+                    var monitorId = activeWindow.Value<int?>("monitor");
+                    if (monitorId != null)
+                    {
+                        var found = monitors.FirstOrDefault(m => m.Id == monitorId.Value);
+                        if (found != null)
+                            return found;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log.Write(PLUGIN_NAME, $"Failed to parse activewindow: {ex.Message}", Plugin.LogLevel.Debug);
+                }
             }
 
-            return null;
+            var focusedMonitor = monitors.FirstOrDefault(m => m.Focused);
+            return focusedMonitor ?? monitors.FirstOrDefault();
         }
 
         private static string? RunHyprctl(params string[] args)
@@ -118,10 +126,10 @@ namespace OpenTabletDriver.Desktop.Interop.Display
                     if (scale <= 0) scale = 1.0f;
                     var transform = m.Value<int?>("transform") ?? 0;
 
-                    // If rotated, swap physical width/height
                     var isRotated = transform % 2 != 0;
                     var actualWidth = isRotated ? height : width;
                     var actualHeight = isRotated ? width : height;
+                    var focused = m.Value<bool?>("focused") ?? false;
 
                     return new MonitorArea(
                         m.Value<int?>("id") ?? i,
@@ -130,7 +138,8 @@ namespace OpenTabletDriver.Desktop.Interop.Display
                         m.Value<float?>("y") ?? 0,
                         actualWidth / scale,
                         actualHeight / scale,
-                        i + 1);
+                        i + 1,
+                        focused);
                 })
                 .Where(m => m.Width > 0 && m.Height > 0)
                 .OrderBy(m => m.Index)
@@ -149,7 +158,7 @@ namespace OpenTabletDriver.Desktop.Interop.Display
                 if (minX != 0 || minY != 0)
                 {
                     parsed = parsed
-                        .Select(m => new MonitorArea(m.Id, m.Name, m.X - minX, m.Y - minY, m.Width, m.Height, m.Index))
+                        .Select(m => new MonitorArea(m.Id, m.Name, m.X - minX, m.Y - minY, m.Width, m.Height, m.Index, m.Focused))
                         .ToArray();
                 }
             }
@@ -164,7 +173,7 @@ namespace OpenTabletDriver.Desktop.Interop.Display
 
             return virtualScreen.Displays
                 .Where(d => d.Index != 0 && d.Width > 0 && d.Height > 0)
-                .Select(d => new MonitorArea(d.Index, $"Display {d.Index}", d.Position.X, d.Position.Y, d.Width, d.Height, d.Index))
+                .Select(d => new MonitorArea(d.Index, $"Display {d.Index}", d.Position.X, d.Position.Y, d.Width, d.Height, d.Index, false))
                 .OrderBy(m => m.Index)
                 .ToArray();
         }
@@ -197,11 +206,42 @@ namespace OpenTabletDriver.Desktop.Interop.Display
                 Rotation = 0
             };
         }
+
+        public static AreaSettings GetVirtualScreenArea(IReadOnlyList<MonitorArea> monitors)
+        {
+            if (monitors == null || monitors.Count == 0)
+            {
+                return new AreaSettings
+                {
+                    Width = 1920,
+                    Height = 1080,
+                    X = 960,
+                    Y = 540,
+                    Rotation = 0
+                };
+            }
+
+            var minX = monitors.Min(m => m.X);
+            var minY = monitors.Min(m => m.Y);
+            var maxX = monitors.Max(m => m.X + m.Width);
+            var maxY = monitors.Max(m => m.Y + m.Height);
+            var width = Math.Max(0, maxX - minX);
+            var height = Math.Max(0, maxY - minY);
+
+            return new AreaSettings
+            {
+                Width = width,
+                Height = height,
+                X = minX + width / 2f,
+                Y = minY + height / 2f,
+                Rotation = 0
+            };
+        }
     }
 
     public sealed class MonitorArea
     {
-        public MonitorArea(int id, string name, float x, float y, float width, float height, int index)
+        public MonitorArea(int id, string name, float x, float y, float width, float height, int index, bool focused = false)
         {
             Id = id;
             Name = name;
@@ -210,6 +250,7 @@ namespace OpenTabletDriver.Desktop.Interop.Display
             Width = width;
             Height = height;
             Index = index;
+            Focused = focused;
         }
 
         public int Id { get; }
@@ -219,6 +260,7 @@ namespace OpenTabletDriver.Desktop.Interop.Display
         public float Width { get; }
         public float Height { get; }
         public int Index { get; }
+        public bool Focused { get; }
         public Vector2 Center => new(X + Width / 2, Y + Height / 2);
 
         public bool Contains(Vector2 point)

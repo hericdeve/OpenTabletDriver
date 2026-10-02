@@ -422,6 +422,12 @@ namespace OpenTabletDriver.Console
             var nextIndex = (currentIndex + offset + monitors.Length) % monitors.Length;
             var nextMonitor = monitors[nextIndex];
 
+            var currentScreen = DesktopInterop.VirtualScreen;
+            if (currentScreen != null && (nextMonitor.X + nextMonitor.Width > currentScreen.Width + 1 || nextMonitor.Y + nextMonitor.Height > currentScreen.Height + 1))
+            {
+                DesktopInterop.ResetVirtualScreenAndPointers();
+            }
+
             await SetDisplayArea(tablet, nextMonitor.Width, nextMonitor.Height, nextMonitor.Center.X, nextMonitor.Center.Y);
             await Out.WriteLineAsync($"Cycled '{tablet}' to monitor {nextMonitor.Name}.");
         }
@@ -433,6 +439,12 @@ namespace OpenTabletDriver.Console
             {
                 await Out.WriteLineAsync("Unable to detect active window monitor.");
                 return;
+            }
+
+            var currentScreen = DesktopInterop.VirtualScreen;
+            if (currentScreen != null && (activeMonitor.X + activeMonitor.Width > currentScreen.Width + 1 || activeMonitor.Y + activeMonitor.Height > currentScreen.Height + 1))
+            {
+                DesktopInterop.ResetVirtualScreenAndPointers();
             }
 
             await SetDisplayArea(tablet, activeMonitor.Width, activeMonitor.Height, activeMonitor.Center.X, activeMonitor.Center.Y);

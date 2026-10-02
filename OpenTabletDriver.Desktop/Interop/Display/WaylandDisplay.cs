@@ -93,9 +93,11 @@ namespace OpenTabletDriver.Desktop.Interop.Display
         {
             get
             {
+                if (_outputs.Count == 0)
+                    return 0;
                 var left = _outputs.Min(d => d.Position.X);
                 var right = _outputs.Max(d => d.Position.X + d.Width);
-                return right - left;
+                return Math.Max(0, right - left);
             }
         }
 
@@ -103,9 +105,11 @@ namespace OpenTabletDriver.Desktop.Interop.Display
         {
             get
             {
+                if (_outputs.Count == 0)
+                    return 0;
                 var top = _outputs.Min(d => d.Position.Y);
                 var bottom = _outputs.Max(d => d.Position.Y + d.Height);
-                return bottom - top;
+                return Math.Max(0, bottom - top);
             }
         }
 

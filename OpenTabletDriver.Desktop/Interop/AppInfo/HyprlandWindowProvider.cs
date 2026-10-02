@@ -126,7 +126,7 @@ namespace OpenTabletDriver.Desktop.Interop.AppProfiler
 
                             ActiveWindowChanged?.Invoke(this, new ActiveWindowChangedEventArgs(windowClass, windowTitle));
                         }
-                        else if (line.StartsWith("monitoradded>>") || line.StartsWith("monitorremoved>>"))
+                        else if (line.StartsWith("monitoradded") || line.StartsWith("monitorremoved") || line.StartsWith("configreloaded"))
                         {
                             MonitorsChanged?.Invoke(this, EventArgs.Empty);
                         }

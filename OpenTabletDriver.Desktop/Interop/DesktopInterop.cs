@@ -132,6 +132,25 @@ namespace OpenTabletDriver.Desktop.Interop
             _ => null
         };
 
+        public static void ResetVirtualScreenAndPointers()
+        {
+            virtualScreen = null;
+
+            if (virtualTablet is IDisposable dispTablet)
+            {
+                dispTablet.Dispose();
+            }
+            virtualTablet = null;
+
+            if (absolutePointer is IDisposable dispPointer)
+            {
+                dispPointer.Dispose();
+            }
+            absolutePointer = null;
+
+            Log.Write("Display", "Virtual screen and absolute pointers reset.", LogLevel.Debug);
+        }
+
         private static IVirtualScreen ConstructLinuxDisplay()
         {
             if (Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") != null)

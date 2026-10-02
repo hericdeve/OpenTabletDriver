@@ -2,12 +2,15 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using OpenTabletDriver.Desktop;
 using OpenTabletDriver.Desktop.AppProfiler;
+using OpenTabletDriver.Desktop.Interop;
 using OpenTabletDriver.Desktop.Interop.AppProfiler;
+using OpenTabletDriver.Desktop.Interop.Display;
 using OpenTabletDriver.Desktop.Profiles;
 using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.Plugin;
@@ -32,6 +35,8 @@ namespace OpenTabletDriver.Daemon
         private string _lastActiveWindowClass = string.Empty;
         private string _lastActiveWindowTitle = string.Empty;
         private AppProfileRule? _activeMatchedRule;
+        private MonitorArea[] _previousMonitors = Array.Empty<MonitorArea>();
+        private CancellationTokenSource? _monitorChangeDebounceCts;
 
         public string CurrentWindowClass => _lastActiveWindowClass;
         public string CurrentWindowTitle => _lastActiveWindowTitle;
@@ -81,6 +86,7 @@ namespace OpenTabletDriver.Daemon
                     _activeProvider.MonitorsChanged += OnMonitorsChanged;
                     _activeProvider.Start();
                     _activeProvider.ForceRefreshActiveWindow();
+                    _previousMonitors = HyprlandDisplayInterop.GetMonitors(DesktopInterop.VirtualScreen);
                     Log.Write("AppProfileMonitor", "Active Window Provider started.", LogLevel.Info);
                 }
                 else
@@ -573,56 +579,54 @@ namespace OpenTabletDriver.Daemon
 
         private void OnMonitorsChanged(object? sender, EventArgs e)
         {
+            _monitorChangeDebounceCts?.Cancel();
+            _monitorChangeDebounceCts?.Dispose();
+            var cts = new CancellationTokenSource();
+            _monitorChangeDebounceCts = cts;
+
             _ = Task.Run(async () =>
             {
+                try
+                {
+                    // Debounce rapid monitor events (e.g. negotiation bursts from Hyprland)
+                    await Task.Delay(150, cts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
                 await _profileLock.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    if (_daemon.Settings == null)
+                    if (cts.IsCancellationRequested || _daemon.Settings == null)
                         return;
 
                     Log.Write("AppProfileMonitor", "Monitors changed. Re-configuring display mapping.", LogLevel.Info);
 
-                    // Give Hyprland a tiny moment to settle the displays before we query
-                    await Task.Delay(100).ConfigureAwait(false);
+                    // Reset DesktopInterop virtual screen and pointers so they will be re-initialized
+                    // with the new desktop dimensions upon next access / OutputMode reconstruction.
+                    DesktopInterop.ResetVirtualScreenAndPointers();
+
+                    var newMonitors = HyprlandDisplayInterop.GetMonitors(DesktopInterop.VirtualScreen);
+                    if (newMonitors.Length == 0)
+                        return;
+
+                    var virtualArea = HyprlandDisplayInterop.GetVirtualScreenArea(newMonitors);
+                    var oldMonitors = _previousMonitors;
 
                     var settings = _daemon.Settings;
-                    AreaSettings? virtualArea = null;
-                    List<AreaSettings>? monitors = null;
+                    var baseSettings = _daemon.BaseSettings;
 
-                    if (_activeProvider is HyprlandWindowProvider)
+                    void UpdateProfilesDisplay(Settings targetSettings)
                     {
-                        virtualArea = HyprlandWindowProvider.GetVirtualScreenArea();
-                        monitors = HyprlandWindowProvider.GetMonitors();
-                    }
-
-                    if (virtualArea != null)
-                    {
-                        foreach (var profile in settings.Profiles)
+                        foreach (var profile in targetSettings.Profiles)
                         {
-                            var oldDisplay = profile.AbsoluteModeSettings?.Display;
-                            bool wasVirtualScreen = false;
-
-                            if (oldDisplay != null && monitors != null && monitors.Count > 0)
-                            {
-                                float maxMonitorWidth = 0;
-                                float maxMonitorHeight = 0;
-                                foreach (var m in monitors)
-                                {
-                                    if (m.Width > maxMonitorWidth) maxMonitorWidth = m.Width;
-                                    if (m.Height > maxMonitorHeight) maxMonitorHeight = m.Height;
-                                }
-
-                                if (oldDisplay.Width > maxMonitorWidth + 1 || oldDisplay.Height > maxMonitorHeight + 1)
-                                {
-                                    wasVirtualScreen = true;
-                                }
-                            }
-
                             if (profile.AbsoluteModeSettings == null)
                                 continue;
 
-                            if (oldDisplay == null || wasVirtualScreen || monitors == null || monitors.Count == 0)
+                            var oldDisplay = profile.AbsoluteModeSettings.Display;
+                            if (oldDisplay == null)
                             {
                                 profile.AbsoluteModeSettings.Display = new AreaSettings
                                 {
@@ -632,41 +636,86 @@ namespace OpenTabletDriver.Daemon
                                     Y = virtualArea.Y,
                                     Rotation = 0
                                 };
+                                continue;
+                            }
+
+                            // Check if oldDisplay was mapped to the entire virtual desktop
+                            bool wasVirtualScreen = false;
+                            if (oldMonitors.Length > 1)
+                            {
+                                float maxOldMonWidth = oldMonitors.Max(m => m.Width);
+                                float maxOldMonHeight = oldMonitors.Max(m => m.Height);
+                                if (oldDisplay.Width > maxOldMonWidth + 5 || oldDisplay.Height > maxOldMonHeight + 5)
+                                {
+                                    wasVirtualScreen = true;
+                                }
+                            }
+
+                            if (wasVirtualScreen)
+                            {
+                                profile.AbsoluteModeSettings.Display = new AreaSettings
+                                {
+                                    Width = virtualArea.Width,
+                                    Height = virtualArea.Height,
+                                    X = virtualArea.X,
+                                    Y = virtualArea.Y,
+                                    Rotation = 0
+                                };
+                                continue;
+                            }
+
+                            // Determine which monitor the profile was previously on
+                            MonitorArea? matchedOldMonitor = null;
+                            if (oldMonitors.Length > 0)
+                            {
+                                var oldCenter = new Vector2(oldDisplay.X, oldDisplay.Y);
+                                matchedOldMonitor = oldMonitors.FirstOrDefault(m => m.Contains(oldCenter));
+                                if (matchedOldMonitor == null)
+                                {
+                                    matchedOldMonitor = oldMonitors
+                                        .OrderBy(m => Vector2.DistanceSquared(oldCenter, m.Center))
+                                        .FirstOrDefault();
+                                }
+                            }
+
+                            MonitorArea? targetNewMonitor = null;
+                            if (matchedOldMonitor != null)
+                            {
+                                // Match by exact monitor Name first, then by ID
+                                targetNewMonitor = newMonitors.FirstOrDefault(m => string.Equals(m.Name, matchedOldMonitor.Name, StringComparison.OrdinalIgnoreCase))
+                                                   ?? newMonitors.FirstOrDefault(m => m.Id == matchedOldMonitor.Id);
+                            }
+
+                            // If previous monitor is still connected, stay mapped to it!
+                            if (targetNewMonitor != null)
+                            {
+                                profile.AbsoluteModeSettings.Display = HyprlandDisplayInterop.ToAreaSettings(targetNewMonitor);
                             }
                             else
                             {
-                                AreaSettings? nearest = null;
-                                float minDistance = float.MaxValue;
-
-                                foreach (var m in monitors)
-                                {
-                                    float dx = oldDisplay.X - m.X;
-                                    float dy = oldDisplay.Y - m.Y;
-                                    float dist = dx * dx + dy * dy;
-                                    if (dist < minDistance)
-                                    {
-                                        minDistance = dist;
-                                        nearest = m;
-                                    }
-                                }
-
-                                if (nearest != null)
-                                {
-                                    profile.AbsoluteModeSettings.Display = new AreaSettings
-                                    {
-                                        Width = nearest.Width,
-                                        Height = nearest.Height,
-                                        X = nearest.X,
-                                        Y = nearest.Y,
-                                        Rotation = 0
-                                    };
-                                }
+                                // If the monitor was disconnected, fallback to active/focused or first monitor
+                                var fallback = HyprlandDisplayInterop.GetActiveMonitor(DesktopInterop.VirtualScreen) ?? newMonitors[0];
+                                profile.AbsoluteModeSettings.Display = HyprlandDisplayInterop.ToAreaSettings(fallback);
                             }
                         }
-
-                        await _daemon.SetSettings(settings, true).ConfigureAwait(false);
-                        await _daemon.ForceResynchronize().ConfigureAwait(false);
                     }
+
+                    UpdateProfilesDisplay(settings);
+                    if (baseSettings != null)
+                    {
+                        UpdateProfilesDisplay(baseSettings);
+                    }
+
+                    _previousMonitors = newMonitors;
+
+                    // Pass isAppProfileUpdate: false so OutputModes are reconstructed and BaseSettings is refreshed
+                    await _daemon.SetSettings(settings, false).ConfigureAwait(false);
+                    await _daemon.ForceResynchronize().ConfigureAwait(false);
+                    Log.Write("AppProfileMonitor", $"Display mapping updated for {newMonitors.Length} monitor(s).", LogLevel.Info);
+                }
+                catch (Exception ex)
+                {
+                    Log.Exception(ex, LogLevel.Error);
                 }
                 finally
                 {
@@ -683,6 +732,13 @@ namespace OpenTabletDriver.Daemon
                 _activeProvider.ActiveWindowChanged -= OnActiveWindowChanged;
                 _activeProvider.MonitorsChanged -= OnMonitorsChanged;
                 _activeProvider = null;
+            }
+
+            if (_monitorChangeDebounceCts != null)
+            {
+                _monitorChangeDebounceCts.Cancel();
+                _monitorChangeDebounceCts.Dispose();
+                _monitorChangeDebounceCts = null;
             }
 
             if (_layerTracker != null)

@@ -263,6 +263,32 @@ namespace OpenTabletDriver.Daemon
                     BaseSettings = Settings.Clone();
                 }
 
+                // Check if any profile has a display area that extends beyond DesktopInterop.VirtualScreen bounds
+                var currentVirtualScreen = DesktopInterop.VirtualScreen;
+                if (currentVirtualScreen != null)
+                {
+                    bool exceedsScreen = false;
+                    foreach (var p in Settings.Profiles)
+                    {
+                        var d = p.AbsoluteModeSettings?.Display;
+                        if (d != null)
+                        {
+                            var right = d.X + d.Width / 2f;
+                            var bottom = d.Y + d.Height / 2f;
+                            if (right > currentVirtualScreen.Width + 1 || bottom > currentVirtualScreen.Height + 1)
+                            {
+                                exceedsScreen = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (exceedsScreen)
+                    {
+                        DesktopInterop.ResetVirtualScreenAndPointers();
+                    }
+                }
+
                 foreach (var dev in Driver.InputDevices)
                 {
                     var tabletReference = dev.CreateReference();
