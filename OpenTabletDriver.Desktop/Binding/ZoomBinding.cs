@@ -91,50 +91,35 @@ namespace OpenTabletDriver.Desktop.Binding
 
         public void PerformZoom()
         {
-            float signedDelta = _direction == ZoomDirection.In ? Amount : -Amount;
-
             if (GestureHandler != null)
             {
+                float signedDelta = _direction == ZoomDirection.In ? Amount : -Amount;
                 GestureHandler.Zoom(signedDelta);
                 return;
             }
 
-            var scrollHandler = Pointer;
-            var keyboard = Keyboard;
-
-            // In non-DI / runtime scenarios, fallback to DesktopInterop if unresolved
-            if (scrollHandler == null && keyboard == null)
+            var keyboard = Keyboard ?? DesktopInterop.VirtualKeyboard;
+            if (keyboard != null)
             {
-                scrollHandler = DesktopInterop.RelativePointer as IMouseScrollHandler;
-                keyboard = DesktopInterop.VirtualKeyboard;
+                // Universal zoom shortcut: Ctrl + Equal (Zoom In) / Ctrl + Minus (Zoom Out)
+                // This reliably triggers zoom in all applications (browsers, Xournal++, office suites, document viewers)
+                // without relying on scroll wheel events that can get misidentified as plain scrolls due to cross-device race conditions.
+                keyboard.Press("Control");
+                string key = _direction == ZoomDirection.In ? "Equal" : "Minus";
+                keyboard.Press(key);
+                keyboard.Release(key);
+                keyboard.Release("Control");
+                return;
             }
 
-            if (scrollHandler != null && keyboard != null)
+            // Fallback: If keyboard is not available, try mouse scroll wheel with Ctrl
+            var scrollHandler = Pointer ?? DesktopInterop.RelativePointer as IMouseScrollHandler;
+            if (scrollHandler != null)
             {
-                // Universal smooth zoom standard: Ctrl + Scroll Wheel
-                // 120 scroll tick units per step
                 int scrollAmount = _direction == ZoomDirection.In ? 120 : -120;
-                keyboard.Press("Control");
                 scrollHandler.ScrollVertically(scrollAmount);
                 if (scrollHandler is ISynchronousPointer syncPointer)
                     syncPointer.Flush();
-                keyboard.Release("Control");
-            }
-            else if (keyboard != null)
-            {
-                // Fallback to Ctrl + Plus / Ctrl + Minus if scroll handler is unavailable
-                keyboard.Press("Control");
-                if (_direction == ZoomDirection.In)
-                {
-                    keyboard.Press("Equal");
-                    keyboard.Release("Equal");
-                }
-                else
-                {
-                    keyboard.Press("Minus");
-                    keyboard.Release("Minus");
-                }
-                keyboard.Release("Control");
             }
         }
 
