@@ -1,5 +1,7 @@
+using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using System.Threading;
 using OpenTabletDriver.Native.Linux;
 using OpenTabletDriver.Native.Linux.Evdev;
 using OpenTabletDriver.Plugin;
@@ -54,6 +56,7 @@ namespace OpenTabletDriver.Desktop.Interop.Input.Relative
 
             Device.Write(EventType.EV_REL, EventCode.REL_X, (int)delta.X);
             Device.Write(EventType.EV_REL, EventCode.REL_Y, (int)delta.Y);
+            Device.Sync();
         }
     }
 }

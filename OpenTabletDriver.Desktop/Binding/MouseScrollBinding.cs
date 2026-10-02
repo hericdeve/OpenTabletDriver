@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using OpenTabletDriver.Desktop.Interop;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Attributes;
 using OpenTabletDriver.Plugin.DependencyInjection;
@@ -50,7 +51,7 @@ namespace OpenTabletDriver.Desktop.Binding
         [OnDependencyLoad]
         public void VerifyInitialization()
         {
-            if (Pointer == null)
+            if (Pointer == null && DesktopInterop.RelativePointer is not IMouseScrollHandler)
             {
                 Log.Write(PLUGIN_NAME,
                     $"{nameof(IMouseScrollHandler)} unavailable. Your selected output mode is incompatible",
@@ -170,6 +171,10 @@ namespace OpenTabletDriver.Desktop.Binding
 
         public void Scroll()
         {
+            var pointer = Pointer ?? (DesktopInterop.RelativePointer as IMouseScrollHandler);
+            if (pointer == null)
+                return;
+
             int baseAmount = Math.Abs(Amount);
             if (baseAmount == 0)
                 baseAmount = 120;
@@ -178,39 +183,39 @@ namespace OpenTabletDriver.Desktop.Binding
             {
                 case ScrollDirection.Up:
                     int upAmount = Invert ? -baseAmount : baseAmount;
-                    Pointer?.ScrollVertically(upAmount);
+                    pointer.ScrollVertically(upAmount);
                     break;
 
                 case ScrollDirection.Down:
                     int downAmount = Invert ? baseAmount : -baseAmount;
-                    Pointer?.ScrollVertically(downAmount);
+                    pointer.ScrollVertically(downAmount);
                     break;
 
                 case ScrollDirection.Right:
                     int rightAmount = Invert ? -baseAmount : baseAmount;
-                    Pointer?.ScrollHorizontally(rightAmount);
+                    pointer.ScrollHorizontally(rightAmount);
                     break;
 
                 case ScrollDirection.Left:
                     int leftAmount = Invert ? baseAmount : -baseAmount;
-                    Pointer?.ScrollHorizontally(leftAmount);
+                    pointer.ScrollHorizontally(leftAmount);
                     break;
 
                 case ScrollDirection.Vertical:
                 default:
                     // Legacy OpenTabletDriver behavior: Invert ? Amount : Amount * -1
                     int legacyVAmount = Invert ? Amount : Amount * -1;
-                    Pointer?.ScrollVertically(legacyVAmount);
+                    pointer.ScrollVertically(legacyVAmount);
                     break;
 
                 case ScrollDirection.Horizontal:
                     // Legacy OpenTabletDriver behavior: Invert ? Amount : Amount * -1
                     int legacyHAmount = Invert ? Amount : Amount * -1;
-                    Pointer?.ScrollHorizontally(legacyHAmount);
+                    pointer.ScrollHorizontally(legacyHAmount);
                     break;
             }
 
-            if (Pointer is ISynchronousPointer synchronousPointer)
+            if (pointer is ISynchronousPointer synchronousPointer)
                 synchronousPointer.Flush();
         }
 

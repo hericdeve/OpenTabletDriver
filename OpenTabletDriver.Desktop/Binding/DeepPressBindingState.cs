@@ -22,6 +22,7 @@ namespace OpenTabletDriver.Desktop.Binding
         private long _pendingStartTimestamp;
         private long _deepPressActivatedTimestamp;
         private bool _wasDrawingBeforeThreshold;
+        private bool _liftFiredDuringCycle;
 
         /// <summary>
         /// Duration in milliseconds to momentarily pulse tip touch to 0 upon entering deep press,
@@ -107,7 +108,11 @@ namespace OpenTabletDriver.Desktop.Binding
                         {
                             IsDeepPressed = false;
                             base.Invoke(tablet, report, false);
-                            FireLiftBinding(tablet, report);
+                            if (!_liftFiredDuringCycle)
+                            {
+                                _liftFiredDuringCycle = true;
+                                FireLiftBinding(tablet, report);
+                            }
                         }
                         else
                         {
@@ -179,11 +184,16 @@ namespace OpenTabletDriver.Desktop.Binding
             {
                 IsDeepPressed = false;
                 base.Invoke(tablet, report, false);
-                FireLiftBinding(tablet, report);
+                if (!_liftFiredDuringCycle)
+                {
+                    _liftFiredDuringCycle = true;
+                    FireLiftBinding(tablet, report);
+                }
             }
 
             IsPending = false;
             LockTipUntilLift = false;
+            _liftFiredDuringCycle = false;
             _deepPressActivatedTimestamp = 0;
             _wasDrawingBeforeThreshold = false;
         }

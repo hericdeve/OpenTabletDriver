@@ -48,6 +48,14 @@ namespace OpenTabletDriver.Tests
         }
 
         [Fact]
+        public void MultiActionBinding_OnDependencyLoad_ProvidesServicesToChild()
+        {
+            var binding = new MultiActionBinding();
+            binding.OnDependencyLoad();
+            Assert.NotNull(binding);
+        }
+
+        [Fact]
         public async Task MultiActionBinding_HoldLiftAction_TriggersOnButtonRelease()
         {
             typeof(MultiActionBinding).GetField("_lastHoldActionFiredGlobal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!

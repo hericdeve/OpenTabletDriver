@@ -6,6 +6,8 @@ using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Output;
 using OpenTabletDriver.Plugin.Platform.Pointer;
 using OpenTabletDriver.Plugin.Tablet;
+using OpenTabletDriver.Plugin.Attributes;
+using OpenTabletDriver.Desktop.Reflection;
 using Xunit;
 
 namespace OpenTabletDriver.Tests
@@ -375,6 +377,113 @@ namespace OpenTabletDriver.Tests
             handler.Consume(new DummyTabletReport { Pressure = 0 });
             Assert.Equal(1, penModeBinding.PressCount);
             Assert.Equal(1, penModeBinding.ReleaseCount);
+        }
+
+        [Fact]
+        public void DeepPress_WithMultiActionBindingOnTip_ExecutesOnlyOnceWithoutDualTrigger()
+        {
+            var tablet = CreateDummyTablet();
+            var handler = new BindingHandler(tablet);
+
+            var tipMock = new MockStateBinding();
+            var deepMock = new MockStateBinding();
+            var deepLiftMock = new MockStateBinding();
+
+            var multiBinding = new MultiActionBinding
+            {
+                DeepClickThreshold = 80f,
+                DeepClickHoldDelayMs = 0f,
+                DeepClickSuppressStroke = true,
+                IsDeepPressHandledExternally = false
+            };
+
+            multiBinding.HoldAction = new PluginSettingStore(typeof(MockStateBinding));
+            multiBinding.DeepClickAction = new PluginSettingStore(typeof(MockStateBinding));
+            multiBinding.DeepClickLiftAction = new PluginSettingStore(typeof(MockStateBinding));
+
+            var deepPressState = new DeepPressBindingState
+            {
+                Binding = deepMock,
+                LiftBinding = deepLiftMock,
+                ActivationThreshold = 80f,
+                HoldDelayMs = 0f,
+                SuppressStroke = true
+            };
+
+            typeof(MultiActionBinding).GetField("_holdBinding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(multiBinding, tipMock);
+            typeof(MultiActionBinding).GetField("_deepPressState", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(multiBinding, deepPressState);
+
+            // Tip assigned as MultiActionBinding
+            handler.Tip = new ThresholdBindingState { Binding = multiBinding };
+
+            // When daemon detects tip is MultiActionBinding, handler.TipDeepPress remains null (decoupled)
+            handler.TipDeepPress = null;
+
+            // Touch down lightly (30% -> 2457)
+            handler.Consume(new DummyTabletReport { Pressure = 2457 });
+            Assert.True(tipMock.IsPressed);
+            Assert.Equal(0, deepMock.PressCount);
+
+            // Press deep (> 80% -> 7000)
+            handler.Consume(new DummyTabletReport { Pressure = 7000 });
+            Assert.True(deepMock.IsPressed);
+            Assert.Equal(1, deepMock.PressCount); // Dispatched exactly once!
+
+            // Keep drawing at high pressure
+            handler.Consume(new DummyTabletReport { Pressure = 7200 });
+            Assert.Equal(1, deepMock.PressCount); // No duplicate trigger!
+
+            // Pen lifted off screen (0 pressure)
+            handler.Consume(new DummyTabletReport { Pressure = 0 });
+            Assert.False(deepMock.IsPressed);
+            Assert.Equal(1, deepMock.ReleaseCount);
+            Assert.Equal(1, deepLiftMock.PressCount); // Lift action dispatched exactly once
+            Assert.Equal(1, deepLiftMock.ReleaseCount);
+        }
+
+        [Fact]
+        public void DeepPress_WithStrokeSuppression_DoesNotLoopResetAndRetrigger()
+        {
+            var tablet = CreateDummyTablet();
+            var handler = new BindingHandler(tablet);
+
+            var tipMock = new MockStateBinding();
+            var deepMock = new MockStateBinding();
+            var deepLiftMock = new MockStateBinding();
+
+            var deepPress = new DeepPressBindingState
+            {
+                Binding = deepMock,
+                LiftBinding = deepLiftMock,
+                ActivationThreshold = 80.0f,
+                HoldDelayMs = 0.0f,
+                SuppressStroke = true
+            };
+
+            handler.Tip = new ThresholdBindingState { Binding = tipMock };
+            handler.TipDeepPress = deepPress;
+
+            // 1. Initial touch and deep press (85% -> 7000)
+            handler.Consume(new DummyTabletReport { Pressure = 7000 });
+            Assert.True(deepMock.IsPressed);
+            Assert.Equal(1, deepMock.PressCount);
+            Assert.Equal(0, deepLiftMock.PressCount);
+
+            // 2. Next report: stroke suppression has mutated report.Pressure or pipeline report,
+            // but physical stroke continues at high pressure (7000).
+            handler.Consume(new DummyTabletReport { Pressure = 7000 });
+            Assert.True(deepMock.IsPressed);
+            Assert.Equal(1, deepMock.PressCount); // Must still be 1, never re-triggered!
+            Assert.Equal(0, deepLiftMock.PressCount); // Lift action must not fire prematurely!
+
+            // 3. Final physical liftoff (Pressure = 0)
+            handler.Consume(new DummyTabletReport { Pressure = 0 });
+            Assert.False(deepMock.IsPressed);
+            Assert.Equal(1, deepMock.ReleaseCount);
+            Assert.Equal(1, deepLiftMock.PressCount);
+            Assert.Equal(1, deepLiftMock.ReleaseCount);
         }
     }
 }

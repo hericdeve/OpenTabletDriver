@@ -595,7 +595,8 @@ namespace OpenTabletDriver.Daemon
                 Log.Write(group, $"Tip Binding: [{tip.Binding}]@{settings.TipActivationThreshold}%");
             }
 
-            if (settings.TipDeepPressButton != null)
+            // Only initialize separate TipDeepPress if TipButton is not already handling it via MultiActionBinding
+            if (settings.TipDeepPressButton != null && tip.Binding is not MultiActionBinding)
             {
                 var tipDeepPress = bindingHandler.TipDeepPress = new DeepPressBindingState
                 {

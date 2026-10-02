@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OpenTabletDriver.Desktop.Contracts;
+using OpenTabletDriver.Desktop.Interop;
 using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Attributes;
@@ -27,9 +28,12 @@ namespace OpenTabletDriver.Desktop.Binding
         private IBinding? _holdLiftBinding;
         private DeepPressBindingState? _deepPressState;
         private bool _deepPressSuppressTip;
+        private bool _suppressTapUntilLift;
         private IDeviceReport? _latestReport;
         private bool _wasTipDown;
         private bool _liftActionFired;
+
+        public bool IsDeepPressHandledExternally { get; set; }
 
         // ── State machine ────────────────────────────────────────────────────────
         //
@@ -88,6 +92,9 @@ namespace OpenTabletDriver.Desktop.Binding
         [Resolved]
         public IVirtualKeyboard? Keyboard { set; get; }
 
+        [Resolved]
+        public OpenTabletDriver.Plugin.Timers.ITimer? Timer { set; get; }
+
         [TabletReference]
         public TabletReference? Tablet { set; get; }
 
@@ -97,10 +104,20 @@ namespace OpenTabletDriver.Desktop.Binding
             var sm = new ServiceManager();
             if (Daemon != null) sm.AddService(() => Daemon);
             if (AppContext != null) sm.AddService(() => AppContext);
-            if (Keyboard != null) sm.AddService(() => Keyboard);
-            if (MouseButtonHandler != null) sm.AddService(() => MouseButtonHandler);
-            if (MouseScrollHandler != null) sm.AddService(() => MouseScrollHandler);
+
+            var kb = Keyboard ?? DesktopInterop.VirtualKeyboard;
+            if (kb != null) sm.AddService(() => kb);
+
+            var mouse = MouseButtonHandler ?? (DesktopInterop.RelativePointer as IMouseButtonHandler);
+            if (mouse != null) sm.AddService(() => mouse);
+
+            var scroll = MouseScrollHandler ?? (DesktopInterop.RelativePointer as IMouseScrollHandler);
+            if (scroll != null) sm.AddService(() => scroll);
+
             if (PenActionHandler != null) sm.AddService(() => PenActionHandler);
+
+            var timer = Timer ?? DesktopInterop.Timer;
+            if (timer != null) sm.AddService(() => timer);
 
             _tapBinding = TapAction?.Construct<IBinding>(sm, Tablet);
             _doubleClickBinding = DoubleClickAction?.Construct<IBinding>(sm, Tablet);
@@ -128,21 +145,30 @@ namespace OpenTabletDriver.Desktop.Binding
         }
 
         public bool IsActive => ((_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { IsActive: true }) ||
-                                (_deepPressState != null && _deepPressState.IsDeepPressed);
+                                (!IsDeepPressHandledExternally && _deepPressState != null && _deepPressState.IsDeepPressed);
         public bool SuppressMotion => (_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { SuppressMotion: true };
         public bool SuppressTip => ((_holdKeysDown || _holdActivated) && _holdBinding is IPointerSuppressor { SuppressTip: true }) ||
-                                   (_deepPressState != null && _deepPressState.IsDeepPressed && DeepClickSuppressStroke) ||
-                                   _deepPressSuppressTip;
+                                   (!IsDeepPressHandledExternally && _deepPressState != null && _deepPressState.IsDeepPressed && DeepClickSuppressStroke) ||
+                                   (!IsDeepPressHandledExternally && _deepPressSuppressTip);
 
         public void Update(TabletReference tablet, IDeviceReport report)
         {
             _latestReport = report;
 
-            if (_deepPressState != null && report is ITabletReport tr)
+            if (report is ITabletReport trLiftCheck && trLiftCheck.Pressure == 0)
+            {
+                _suppressTapUntilLift = false;
+            }
+
+            if (!IsDeepPressHandledExternally && _deepPressState != null && report is ITabletReport tr)
             {
                 float maxPressure = tablet?.Properties?.Specifications?.Pen?.MaxPressure ?? 8192f;
                 float pressurePercent = maxPressure > 0 ? ((float)tr.Pressure / maxPressure * 100f) : 0f;
                 _deepPressState.ProcessReport(tablet!, report, pressurePercent, out _deepPressSuppressTip);
+                if (_deepPressState.IsDeepPressed || _deepPressState.LockTipUntilLift)
+                {
+                    _suppressTapUntilLift = true;
+                }
             }
 
             if ((_holdKeysDown || _holdActivated) && _holdBinding is IContinuousBinding continuous)
@@ -357,22 +383,35 @@ namespace OpenTabletDriver.Desktop.Binding
                         else if (_doubleClickBinding == null)
                         {
                             // Optimisation: no double-click action configured → fire tap immediately,
-                            // skipping the double-click window entirely.
+                            // skipping the double-click window entirely (unless suppressed after a deep click)
                             _state = GestureState.Idle;
-                            postAction = () => FireAction(_tapBinding, tablet, report);
+                            if (!_suppressTapUntilLift)
+                            {
+                                postAction = () => FireAction(_tapBinding, tablet, report);
+                            }
                         }
                         else
                         {
-                            // Enter double-click wait.
-                            _state = GestureState.WaitingForDoubleClick;
-                            postAction = () => StartDoubleClickWait(tablet, report);
+                            // Enter double-click wait (unless suppressed after a deep click)
+                            if (_suppressTapUntilLift)
+                            {
+                                _state = GestureState.Idle;
+                            }
+                            else
+                            {
+                                _state = GestureState.WaitingForDoubleClick;
+                                postAction = () => StartDoubleClickWait(tablet, report);
+                            }
                         }
                         break;
                     }
 
                     case GestureState.SecondPressHeld:
                         _state = GestureState.Idle;
-                        postAction = () => FireAction(_doubleClickBinding, tablet, report);
+                        if (!_suppressTapUntilLift)
+                        {
+                            postAction = () => FireAction(_doubleClickBinding, tablet, report);
+                        }
                         break;
 
                     // Spurious Release (Idle / WaitingForDoubleClick) — ignore.
@@ -386,10 +425,15 @@ namespace OpenTabletDriver.Desktop.Binding
             _lastReleaseTime = DateTime.Now;
             postAction?.Invoke();
 
-            if (_deepPressState != null)
+            if (!IsDeepPressHandledExternally && _deepPressState != null)
             {
                 _deepPressState.Reset(tablet, _latestReport ?? report);
                 _deepPressSuppressTip = false;
+            }
+
+            if ((report is ITabletReport tr && tr.Pressure == 0) || report is OutOfRangeReport)
+            {
+                _suppressTapUntilLift = false;
             }
         }
 

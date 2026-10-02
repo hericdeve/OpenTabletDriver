@@ -121,7 +121,6 @@ namespace OpenTabletDriver.Desktop.Interop
 
         public static IGestureHandler? GestureHandler => CurrentPlatform switch
         {
-            PluginPlatform.Linux => gestureHandler ??= new OpenTabletDriver.Desktop.Interop.Input.Gesture.EvdevVirtualTouchpad(),
             _ => null
         };
 

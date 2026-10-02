@@ -1,4 +1,5 @@
 using System;
+using OpenTabletDriver.Desktop.Interop;
 using OpenTabletDriver.Plugin;
 using OpenTabletDriver.Plugin.Attributes;
 using OpenTabletDriver.Plugin.DependencyInjection;
@@ -24,6 +25,9 @@ namespace OpenTabletDriver.Desktop.Binding
 
         [Resolved]
         public IGestureHandler? GestureHandler { get; set; }
+
+        [Resolved]
+        public IMouseScrollHandler? Pointer { get; set; }
 
         [Resolved]
         public IVirtualKeyboard? Keyboard { get; set; }
@@ -92,22 +96,45 @@ namespace OpenTabletDriver.Desktop.Binding
             if (GestureHandler != null)
             {
                 GestureHandler.Zoom(signedDelta);
+                return;
             }
-            else if (Keyboard != null)
+
+            var scrollHandler = Pointer;
+            var keyboard = Keyboard;
+
+            // In non-DI / runtime scenarios, fallback to DesktopInterop if unresolved
+            if (scrollHandler == null && keyboard == null)
             {
-                // Fallback to Ctrl + Plus / Ctrl + Minus if gesture handler is unavailable
-                Keyboard.Press("Control");
+                scrollHandler = DesktopInterop.RelativePointer as IMouseScrollHandler;
+                keyboard = DesktopInterop.VirtualKeyboard;
+            }
+
+            if (scrollHandler != null && keyboard != null)
+            {
+                // Universal smooth zoom standard: Ctrl + Scroll Wheel
+                // 120 scroll tick units per step
+                int scrollAmount = _direction == ZoomDirection.In ? 120 : -120;
+                keyboard.Press("Control");
+                scrollHandler.ScrollVertically(scrollAmount);
+                if (scrollHandler is ISynchronousPointer syncPointer)
+                    syncPointer.Flush();
+                keyboard.Release("Control");
+            }
+            else if (keyboard != null)
+            {
+                // Fallback to Ctrl + Plus / Ctrl + Minus if scroll handler is unavailable
+                keyboard.Press("Control");
                 if (_direction == ZoomDirection.In)
                 {
-                    Keyboard.Press("Equal");
-                    Keyboard.Release("Equal");
+                    keyboard.Press("Equal");
+                    keyboard.Release("Equal");
                 }
                 else
                 {
-                    Keyboard.Press("Minus");
-                    Keyboard.Release("Minus");
+                    keyboard.Press("Minus");
+                    keyboard.Release("Minus");
                 }
-                Keyboard.Release("Control");
+                keyboard.Release("Control");
             }
         }
 

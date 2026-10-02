@@ -15,6 +15,7 @@ namespace OpenTabletDriver.Desktop.Interop
             if (GetCode(button) is EventCode code)
             {
                 Device.Write(EventType.EV_KEY, code, 1);
+                Device.Sync();
             }
         }
 
@@ -23,6 +24,7 @@ namespace OpenTabletDriver.Desktop.Interop
             if (GetCode(button) is EventCode code)
             {
                 Device.Write(EventType.EV_KEY, code, 0);
+                Device.Sync();
             }
         }
 
@@ -39,6 +41,7 @@ namespace OpenTabletDriver.Desktop.Interop
                 Device.Write(EventType.EV_REL, EventCode.REL_WHEEL, detents);
                 _vWheelAccumulator %= 120;
             }
+            Device.Sync();
         }
 
         public void ScrollHorizontally(int amount)
@@ -51,6 +54,7 @@ namespace OpenTabletDriver.Desktop.Interop
                 Device.Write(EventType.EV_REL, EventCode.REL_HWHEEL, detents);
                 _hWheelAccumulator %= 120;
             }
+            Device.Sync();
         }
 
         protected virtual EventCode? GetCode(MouseButton button) => button switch

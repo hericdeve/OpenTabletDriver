@@ -61,12 +61,32 @@ namespace OpenTabletDriver.Tests
         }
 
         [Fact]
+        public void Zoom_UsesCtrlScrollWhenNoGestureHandler()
+        {
+            var keyboard = Substitute.For<IVirtualKeyboard>();
+            var scroll = Substitute.For<IMouseScrollHandler>();
+            using var binding = new ZoomInBinding
+            {
+                GestureHandler = null,
+                Pointer = scroll,
+                Keyboard = keyboard
+            };
+
+            binding.PerformZoom();
+
+            keyboard.Received(1).Press("Control");
+            scroll.Received(1).ScrollVertically(120);
+            keyboard.Received(1).Release("Control");
+        }
+
+        [Fact]
         public void Zoom_FallbackToKeyboardWhenNoGestureHandler()
         {
             var keyboard = Substitute.For<IVirtualKeyboard>();
             using var binding = new ZoomInBinding
             {
                 GestureHandler = null,
+                Pointer = null,
                 Keyboard = keyboard
             };
 
