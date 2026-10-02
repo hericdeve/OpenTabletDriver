@@ -983,58 +983,86 @@ namespace OpenTabletDriver.Daemon
                         Items = new List<HudItem>()
                     };
 
-                    int maxSlots = Settings?.CompositorSettings?.MaxHudWorkspaceSlots ?? 8;
-                    var displayWorkspaces = workspaces.Take(maxSlots).ToList();
-                    var actionType = isMoveWindow ? HudActionType.MoveWindowWorkspaceLayer : HudActionType.WorkspaceLayer;
-
-                    foreach (var ws in displayWorkspaces)
+                    if (isMoveWindow)
                     {
-                        var baseTitle = string.IsNullOrWhiteSpace(ws.LastWindowTitle)
-                            ? $"WS {ws.Name}"
-                            : $"[{ws.Name}] {ws.LastWindowTitle}";
-
-                        string label;
-                        if (isMoveWindow)
+                        for (int i = 1; i <= 9; i++)
                         {
-                            label = string.IsNullOrWhiteSpace(ws.LastWindowTitle)
-                                ? $"-> WS {ws.Name}"
-                                : $"-> [{ws.Name}] {ws.LastWindowTitle}";
-                        }
-                        else
-                        {
-                            label = baseTitle;
-                        }
-
-                        if (label.Length > 16)
-                            label = label.Substring(0, 14) + "..";
-
-                        if (ws.IsActive)
-                            label = "✓ " + label;
-
-                        wsConfig.Items.Add(new HudItem
-                        {
-                            Label = label,
-                            Action = new HudAction
+                            var ws = workspaces.FirstOrDefault(w => w.Id == i.ToString() || w.Name == i.ToString());
+                            string label;
+                            if (ws != null && !string.IsNullOrWhiteSpace(ws.LastWindowTitle))
                             {
-                                Type = actionType,
-                                Value = ws.Id
+                                var title = ws.LastWindowTitle;
+                                if (title.Length > 12)
+                                    title = title.Substring(0, 10) + "..";
+                                label = $"-> [{i}] {title}";
                             }
-                        });
-                    }
+                            else
+                            {
+                                label = $"-> WS {i}";
+                            }
 
-                    if (wsConfig.Items.Count == 0)
-                    {
-                        for (int i = 1; i <= 5; i++)
-                        {
+                            if (ws != null && ws.IsActive)
+                                label = "✓ " + label;
+
                             wsConfig.Items.Add(new HudItem
                             {
-                                Label = isMoveWindow ? $"-> WS {i}" : $"WS {i}",
+                                Label = label,
                                 Action = new HudAction
                                 {
-                                    Type = actionType,
+                                    Type = HudActionType.MoveWindowWorkspaceLayer,
                                     Value = i.ToString()
                                 }
                             });
+                        }
+                    }
+                    else
+                    {
+                        int maxSlots = Settings?.CompositorSettings?.MaxHudWorkspaceSlots ?? 8;
+                        var displayWorkspaces = workspaces.Take(maxSlots).ToList();
+
+                        foreach (var ws in displayWorkspaces)
+                        {
+                            string label;
+                            if (!string.IsNullOrWhiteSpace(ws.LastWindowTitle))
+                            {
+                                var title = ws.LastWindowTitle;
+                                if (title.Length > 12)
+                                    title = title.Substring(0, 10) + "..";
+                                label = $"[{ws.Name}] {title}";
+                            }
+                            else
+                            {
+                                label = $"WS {ws.Name}";
+                            }
+
+                            if (ws.IsActive)
+                                label = "✓ " + label;
+
+                            wsConfig.Items.Add(new HudItem
+                            {
+                                Label = label,
+                                Action = new HudAction
+                                {
+                                    Type = HudActionType.WorkspaceLayer,
+                                    Value = ws.Id
+                                }
+                            });
+                        }
+
+                        if (wsConfig.Items.Count == 0)
+                        {
+                            for (int i = 1; i <= 5; i++)
+                            {
+                                wsConfig.Items.Add(new HudItem
+                                {
+                                    Label = $"WS {i}",
+                                    Action = new HudAction
+                                    {
+                                        Type = HudActionType.WorkspaceLayer,
+                                        Value = i.ToString()
+                                    }
+                                });
+                            }
                         }
                     }
 

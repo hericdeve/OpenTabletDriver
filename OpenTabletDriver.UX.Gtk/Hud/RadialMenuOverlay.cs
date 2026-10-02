@@ -425,10 +425,8 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                 string badgeText = string.Empty;
                 string labelText = rawText;
 
-                bool isMoveAction = false;
                 if (rawText.StartsWith("-> "))
                 {
-                    isMoveAction = true;
                     rawText = rawText.Substring(3).Trim();
                 }
 
@@ -441,7 +439,7 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                 else if (rawText.StartsWith("WS "))
                 {
                     badgeText = rawText.Substring(3).Trim();
-                    labelText = isMoveAction ? "Move" : string.Empty;
+                    labelText = string.Empty;
                 }
 
                 cr.SelectFontFace(fontFamily, FontSlant.Normal, (bloom > 0.4f) ? FontWeight.Bold : FontWeight.Normal);

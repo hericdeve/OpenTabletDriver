@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using OpenTabletDriver.Desktop.Binding;
+using OpenTabletDriver.Desktop.Hud;
 using OpenTabletDriver.Desktop.Reflection;
 using OpenTabletDriver.Plugin.Attributes;
 using Xunit;
@@ -178,6 +179,42 @@ namespace OpenTabletDriver.Tests
             Assert.Equal("Move Window to Workspace (HUD Layer)", moveStore.GetHumanReadableString());
             Assert.Equal("Switch Workspace", PluginSettingStore.FormatCompactAction(switchStore));
             Assert.Equal("Move Window to WS", PluginSettingStore.FormatCompactAction(moveStore));
+        }
+
+        [Fact]
+        public void MoveWindowHudLayer_SupportsWorkspacesOneThroughNine()
+        {
+            // Verify that MoveWindow sub-layer item is recognized as a sub-layer
+            var rootMoveItem = new HudItem
+            {
+                Label = "Move Window",
+                Action = new HudAction { Type = HudActionType.MoveWindowWorkspaceLayer, Value = null }
+            };
+            Assert.True(rootMoveItem.IsSubLayer);
+
+            // Verify that for all 9 workspace targets, effective binding maps to WorkspaceControlBinding
+            for (int i = 1; i <= 9; i++)
+            {
+                var wsItem = new HudItem
+                {
+                    Label = $"-> WS {i}",
+                    Action = new HudAction { Type = HudActionType.MoveWindowWorkspaceLayer, Value = i.ToString() }
+                };
+                Assert.False(wsItem.IsSubLayer);
+
+                var effectiveStore = wsItem.GetEffectiveBinding();
+                Assert.NotNull(effectiveStore);
+                Assert.Equal(typeof(WorkspaceControlBinding).FullName, effectiveStore.Path);
+
+                var actionSetting = effectiveStore.Settings.FirstOrDefault(s => s.Property == "Action")?.Value?.ToString();
+                var targetSetting = effectiveStore.Settings.FirstOrDefault(s => s.Property == "Target")?.Value?.ToString();
+
+                Assert.Equal("Move Window to Workspace", actionSetting);
+                Assert.Equal(i.ToString(), targetSetting);
+
+                Assert.Equal($"Move to Workspace {i}", effectiveStore.GetHumanReadableString());
+                Assert.Equal($"Move -> WS {i}", PluginSettingStore.FormatCompactAction(effectiveStore));
+            }
         }
     }
 }
