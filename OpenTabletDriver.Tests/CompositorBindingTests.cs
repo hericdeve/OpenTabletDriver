@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using OpenTabletDriver.Desktop.Binding;
@@ -215,6 +216,109 @@ namespace OpenTabletDriver.Tests
                 Assert.Equal($"Move to Workspace {i}", effectiveStore.GetHumanReadableString());
                 Assert.Equal($"Move -> WS {i}", PluginSettingStore.FormatCompactAction(effectiveStore));
             }
+        }
+
+        [Fact]
+        public void WorkspaceAppIcons_RowCapacitiesAndDynamicResizing()
+        {
+            // Verify the 3-tier trapezoidal layout capacities:
+            // First (inner) row: max 2 slots
+            // Second (mid) row: max 3 slots
+            // Last (outer) row: max 4 slots
+            // Total = 9 slots
+            static (int[] rows, int iconSize) GetLayout(int appCount)
+            {
+                int maxDisplay = Math.Min(appCount, 9);
+                int[] rowCounts = maxDisplay switch
+                {
+                    1 => new[] { 1 },
+                    2 => new[] { 2 },
+                    3 => new[] { 1, 2 },
+                    4 => new[] { 2, 2 },
+                    5 => new[] { 2, 3 },
+                    6 => new[] { 1, 2, 3 },
+                    7 => new[] { 1, 2, 4 },
+                    8 => new[] { 1, 3, 4 },
+                    _ => new[] { 2, 3, 4 }
+                };
+
+                int iconSize = rowCounts.Length switch
+                {
+                    1 => 26,
+                    2 => 21,
+                    _ => 17
+                };
+
+                return (rowCounts, iconSize);
+            }
+
+            // 1 app: 1 row of 1 icon, 26px
+            var l1 = GetLayout(1);
+            Assert.Single(l1.rows);
+            Assert.Equal(1, l1.rows[0]);
+            Assert.Equal(26, l1.iconSize);
+
+            // 2 apps: 1 row of 2 icons (first row capacity 2), 26px
+            var l2 = GetLayout(2);
+            Assert.Single(l2.rows);
+            Assert.Equal(2, l2.rows[0]);
+            Assert.Equal(26, l2.iconSize);
+
+            // 3-5 apps: 2 rows active (additional row added), icon resized to 21px
+            var l3 = GetLayout(3);
+            Assert.Equal(2, l3.rows.Length);
+            Assert.Equal(1, l3.rows[0]);
+            Assert.Equal(2, l3.rows[1]);
+            Assert.Equal(21, l3.iconSize);
+
+            var l4 = GetLayout(4);
+            Assert.Equal(2, l4.rows.Length);
+            Assert.Equal(2, l4.rows[0]);
+            Assert.Equal(2, l4.rows[1]);
+            Assert.Equal(21, l4.iconSize);
+
+            var l5 = GetLayout(5);
+            Assert.Equal(2, l5.rows.Length);
+            Assert.Equal(2, l5.rows[0]); // first row filled to cap 2
+            Assert.Equal(3, l5.rows[1]); // second row filled to cap 3
+            Assert.Equal(21, l5.iconSize);
+
+            // 6-9 apps: 3 rows active (additional row added), icon resized to 17px
+            var l6 = GetLayout(6);
+            Assert.Equal(3, l6.rows.Length);
+            Assert.Equal(1, l6.rows[0]);
+            Assert.Equal(2, l6.rows[1]);
+            Assert.Equal(3, l6.rows[2]);
+            Assert.Equal(17, l6.iconSize);
+
+            var l7 = GetLayout(7);
+            Assert.Equal(3, l7.rows.Length);
+            Assert.Equal(1, l7.rows[0]);
+            Assert.Equal(2, l7.rows[1]);
+            Assert.Equal(4, l7.rows[2]);
+            Assert.Equal(17, l7.iconSize);
+
+            var l8 = GetLayout(8);
+            Assert.Equal(3, l8.rows.Length);
+            Assert.Equal(1, l8.rows[0]);
+            Assert.Equal(3, l8.rows[1]);
+            Assert.Equal(4, l8.rows[2]);
+            Assert.Equal(17, l8.iconSize);
+
+            var l9 = GetLayout(9);
+            Assert.Equal(3, l9.rows.Length);
+            Assert.Equal(2, l9.rows[0]); // first row max 2
+            Assert.Equal(3, l9.rows[1]); // second row max 3
+            Assert.Equal(4, l9.rows[2]); // last row max 4
+            Assert.Equal(17, l9.iconSize);
+
+            // Cap at 9 for >9 apps
+            var l12 = GetLayout(12);
+            Assert.Equal(3, l12.rows.Length);
+            Assert.Equal(2, l12.rows[0]);
+            Assert.Equal(3, l12.rows[1]);
+            Assert.Equal(4, l12.rows[2]);
+            Assert.Equal(17, l12.iconSize);
         }
     }
 }

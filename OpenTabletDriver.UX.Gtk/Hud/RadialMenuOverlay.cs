@@ -282,46 +282,45 @@ namespace OpenTabletDriver.UX.Gtk.Hud
                 return;
 
             int totalApps = apps.Count;
-            int maxDisplay = Math.Min(totalApps, 7);
+            int maxDisplay = Math.Min(totalApps, 9);
 
             // Determine concentric rows based on app count
-            // Outer rows have more arc space, inner rows have less
-            // 1 app:  [1]
-            // 2 apps: [1 inner, 1 outer]
-            // 3 apps: [1 inner, 2 outer]
-            // 4 apps: [1 inner, 1 mid, 2 outer]
-            // 5 apps: [1 inner, 2 mid, 2 outer]
-            // 6 apps: [1 inner, 2 mid, 3 outer]
-            // 7 apps: [1 inner, 3 mid, 3 outer]
+            // 3-tier trapezoid capacity:
+            // First (inner) row:  max 2 slots
+            // Second (mid) row:   max 3 slots
+            // Last (outer) row:   max 4 slots
+            // Total capacity across 3 rows = 2 + 3 + 4 = 9 slots
             int[] rowCounts = maxDisplay switch
             {
                 1 => new[] { 1 },
-                2 => new[] { 1, 1 },
+                2 => new[] { 2 },
                 3 => new[] { 1, 2 },
-                4 => new[] { 1, 1, 2 },
-                5 => new[] { 1, 2, 2 },
+                4 => new[] { 2, 2 },
+                5 => new[] { 2, 3 },
                 6 => new[] { 1, 2, 3 },
-                _ => new[] { 1, 3, 3 }
+                7 => new[] { 1, 2, 4 },
+                8 => new[] { 1, 3, 4 },
+                _ => new[] { 2, 3, 4 }
             };
 
             int numRows = rowCounts.Length;
             double radialSpan = radiusOuter - radiusInner;
             double midRadius = (radiusInner + radiusOuter) / 2.0;
 
-            // Icon size dynamically scales if multiple rows
+            // Icon size dynamically resizes at each additional row to maintain ideal proportions
             int iconSize = numRows switch
             {
                 1 => 26,
-                2 => 22,
-                _ => 18
+                2 => 21,
+                _ => 17
             };
 
             // Dynamic radial spacing centered around midRadius
             double rowSpacing = numRows switch
             {
                 1 => 0.0,
-                2 => Math.Min(26.0, radialSpan * 0.35),
-                _ => Math.Min(22.0, radialSpan * 0.28)
+                2 => Math.Min(26.0, radialSpan * 0.32),
+                _ => Math.Min(23.0, radialSpan * 0.25)
             };
 
             double firstRowRadius = midRadius - ((numRows - 1) * rowSpacing / 2.0);
@@ -334,7 +333,7 @@ namespace OpenTabletDriver.UX.Gtk.Hud
 
                 // Angular step along the arc at rowRadius:
                 // Arc length S = r * dTheta => dTheta = (iconSize + spacing) / r
-                double itemArcWidth = iconSize + 6.0;
+                double itemArcWidth = iconSize + (numRows switch { 1 => 6.0, 2 => 5.0, _ => 3.5 });
                 double angularStep = itemArcWidth / rowRadius;
 
                 // Center the row's icons symmetrically around midRad
